@@ -364,7 +364,7 @@ function render(){
   const R=S.rna; $('wRna').innerHTML = R ? `celda (${R.cell}) → <b>${R.label}</b> p=${fmt(R.confidence,2)} · libre ${fmt(R.probabilities.libre,2)} · obst ${fmt(R.probabilities.obstaculo,2)} · barr ${fmt(R.probabilities.barranco,2)}${R.low_confidence?' · <span class="r-warn">baja confianza</span>':''}`
     : (S.config.policy==='sin_rna'||S.config.policy==='control'||S.config.policy==='ag_puro' ? '<span class="small">desactivada en esta política</span>' : (S.rna_error?`<span class="r-veto">${S.rna_error}: fusión con sensor determinista</span>`:'—'));
   const F=S.fuzzy; $('wFz').innerHTML = F ? `dist ${fmt(F.inputs.distance,1)} m · bat ${fmt(F.inputs.battery,0)} % · pend ${fmt(F.inputs.slope,1)}° → velocidad <b>${fmt(F.speed,2)}</b> · ${F.rules.length} reglas (${F.rules.slice(0,3).map(r=>'R'+r.id+'='+fmt(r.strength,2)).join(', ')})`
-    : '<span class="small">desactivada: velocidad fija 0,50</span>';
+    : (st.step===0 ? '—' : '<span class="small">desactivada: velocidad fija 0,50</span>');
   const G=S.ga; const ch=G.candidates&&G.chosen!==null&&G.chosen!==undefined?G.candidates[G.chosen]:null;
   $('wGa').innerHTML = G.mode==='ag' ? `${G.candidates.length} rutas · elegida #${G.chosen??'—'} fitness <b>${ch?fmt(ch.fitness,3):'—'}</b> · ${G.generations_run} gen${G.stopped_early?' (parada temprana)':''} · motivo ${G.reason}${G.rejected.length?` · <span class="r-veto">${G.rejected.length} vetada(s)</span>`:''}`
     : (G.mode ? `<span class="small">${G.message||G.mode}</span>` : '—');

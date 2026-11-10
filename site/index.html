@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARES-X Control de Misión</title>
+<style>
+:root{
+  --app-h:100vh;
+  --bg:#070b12;--panel:#0d1420;--panel2:#111b2a;--line:#1d2a3d;--line2:#2a3b55;
+  --text:#d7e2f0;--muted:#7f93ad;--dim:#56688a;
+  --accent:#4cc3ff;--ok:#35d07f;--warn:#ffb547;--bad:#ff5d6c;--violet:#a98bff;--sci:#3ee6d6;
+  --rock:#8b6b55;--font:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;--mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:12px/1.35 var(--font);overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+#app{height:var(--app-h);display:grid;grid-template-rows:42px 1fr;min-height:560px}
+header{display:flex;align-items:center;gap:10px;padding:0 12px;background:linear-gradient(90deg,#0b1626,#0a1220);border-bottom:1px solid var(--line)}
+.brand{font-weight:800;letter-spacing:.08em;font-size:13px;white-space:nowrap}
+.brand b{color:var(--accent)}
+.chips{display:flex;gap:6px;flex-wrap:nowrap;overflow:hidden;flex:1;min-width:0}
+.chip{padding:3px 8px;border:1px solid var(--line2);border-radius:999px;color:var(--muted);white-space:nowrap;font-size:11px}
+.chip strong{color:var(--text);font-weight:600}
+.state{font-weight:700;letter-spacing:.04em}
+.st-EXPLORACION{color:var(--ok);border-color:#1f5a3e}.st-ALERTA,.st-REPLANIFICACION{color:var(--warn);border-color:#6b4d1d}
+.st-REFUGIO{color:var(--accent);border-color:#1d4d6b}.st-MODO_SEGURO,.st-FRACASO{color:var(--bad);border-color:#6b1d27}.st-EXITO{color:#062;background:var(--ok);border-color:var(--ok)}
+.st-CONFIGURACION{color:var(--muted)}
+.body{display:grid;grid-template-columns:258px 1fr;min-height:0}
+aside{border-right:1px solid var(--line);padding:8px 10px;display:flex;flex-direction:column;gap:7px;min-height:0;overflow:hidden;background:#0a101a}
+h3{margin:0 0 4px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.field{display:flex;flex-direction:column;gap:2px;min-width:0}
+.field label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+select,input[type=number]{background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:3px 5px;width:100%;min-width:0}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:6px;padding:4px 7px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}.btn:active{transform:translateY(1px)}
+.btn.primary{background:#0f3550;border-color:#1c6a9a;color:#cdeeff}
+.btn.on{background:#173b23;border-color:var(--ok);color:#bff5d6}
+.row{display:flex;gap:5px;align-items:center}
+.row>.btn{flex:1}
+.events{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.events .btn{font-size:10.5px;padding:3px 4px;overflow:hidden;text-overflow:ellipsis}
+.msg{min-height:30px;max-height:52px;overflow:hidden;font-size:11px;padding:5px 7px;border-radius:6px;background:#0b1420;border:1px solid var(--line);color:var(--muted)}
+.msg.err{color:#ffd0d5;border-color:#6b1d27;background:#1a0b10}
+main{display:grid;grid-template-rows:30px 1fr;min-width:0;min-height:0}
+.tabs{display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--line);align-items:flex-end}
+.tab{padding:6px 12px;border:1px solid transparent;border-bottom:none;border-radius:7px 7px 0 0;color:var(--muted);cursor:pointer;background:none}
+.tab.active{color:var(--text);background:var(--panel);border-color:var(--line)}
+.view{display:none;min-height:0;padding:8px;gap:8px}
+.view.active{display:grid}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 10px;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.panel>h3{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.tag{font-size:9.5px;padding:1px 6px;border-radius:4px;border:1px solid var(--line2);color:var(--muted);letter-spacing:.04em;text-transform:none;font-weight:600}
+#v-mission{grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,.62fr)}
+#mapPanel{grid-row:1}
+.right{display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;min-height:0}
+canvas{display:block;width:100%;height:100%}
+.canvasBox{flex:1;min-height:0;position:relative}
+.legend{display:flex;gap:9px;flex-wrap:wrap;color:var(--muted);font-size:10px;margin-top:4px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px;vertical-align:-1px}
+.tele{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.kv{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;min-width:0}
+.kv .k{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv .v{font:600 13px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{height:4px;background:#1a2638;border-radius:2px;margin-top:3px;overflow:hidden}.bar>span{display:block;height:100%;background:var(--ok)}
+.sensors{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.dot{font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid #1f5a3e;color:var(--ok)}.dot.bad{border-color:#6b1d27;color:var(--bad)}.dot.warn{border-color:#6b4d1d;color:var(--warn)}
+.why{display:grid;gap:5px;overflow:hidden}
+.line{display:grid;grid-template-columns:62px 1fr;gap:7px;padding:5px 7px;border-radius:6px;background:var(--panel2);border-left:3px solid var(--line2)}
+.line .who{font-weight:800;font-size:10.5px;letter-spacing:.08em}
+.line .what{font-family:var(--mono);font-size:11px;overflow:hidden}
+.line.rna{border-left-color:var(--accent)}.line.rna .who{color:var(--accent)}
+.line.fz{border-left-color:var(--warn)}.line.fz .who{color:var(--warn)}
+.line.ga{border-left-color:var(--violet)}.line.ga .who{color:var(--violet)}
+.line.sup{border-left-color:var(--ok)}.line.sup .who{color:var(--ok)}
+.line.sup.veto{border-left-color:var(--bad)}.line.sup.veto .who{color:var(--bad)}
+.small{font-size:10.5px;color:var(--muted)}
+.trace{flex:1;overflow:auto;font-family:var(--mono);font-size:10.5px;min-height:0}
+.trace table{width:100%;border-collapse:collapse}
+.trace td,.trace th{padding:2px 5px;border-bottom:1px solid #142033;text-align:left;white-space:nowrap}
+.trace th{position:sticky;top:0;background:var(--panel);color:var(--dim);font-weight:600}
+.trace td.x{white-space:normal;color:var(--muted);font-family:var(--font)}
+.r-veto{color:var(--bad)}.r-warn{color:var(--warn)}.r-ok{color:var(--ok)}
+.bottom{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:8px;grid-column:1/3;min-height:0}
+.charts{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:4px;flex:1;min-height:0}
+.charts canvas,.mini4 canvas{min-height:0;height:100%;overflow:hidden}
+.mini4{grid-template-rows:minmax(0,1fr) minmax(0,1fr)!important}
+.lab{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:minmax(0,1fr) minmax(0,1fr)}
+.slider{display:grid;grid-template-columns:92px 1fr 52px;gap:6px;align-items:center;margin:3px 0}
+.slider span{font-family:var(--mono);text-align:right}
+.probs .p{display:grid;grid-template-columns:72px 1fr 52px;gap:6px;align-items:center;margin:4px 0}
+.probs .track{height:12px;background:#1a2638;border-radius:3px;overflow:hidden}.probs .track span{display:block;height:100%}
+table.mt{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:11px}
+table.mt td,table.mt th{border:1px solid var(--line);padding:3px 5px;text-align:center}
+table.mt th{color:var(--dim);font-weight:600}
+.scroll{overflow:auto;min-height:0;flex:1}
+.rule{padding:3px 6px;border-radius:5px;margin:2px 0;background:var(--panel2);display:grid;grid-template-columns:26px 1fr 44px;gap:6px;font-size:11px;border:1px solid transparent}
+.rule.act{border-color:#6b4d1d;background:#21180a}
+.rule b{font-family:var(--mono);color:var(--warn)}
+.big{font:700 22px var(--mono)}
+.mini4{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:6px;flex:1;min-height:0}
+.pill{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;border:1px solid var(--line2)}
+.pill.ok{color:var(--ok);border-color:#1f5a3e}.pill.bad{color:var(--bad);border-color:#6b1d27}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(7,11,18,.7);font-size:13px;color:var(--muted);pointer-events:none}
+@media (max-width:1100px){.body{grid-template-columns:220px 1fr}.tele{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand"><b>ARES-X</b> | CENTRO DE CONTROL DE MISIÓN</div>
+  <div class="chips">
+    <span class="chip" id="cPlanet">—</span>
+    <span class="chip state" id="cState">—</span>
+    <span class="chip" id="cStep">—</span>
+    <span class="chip" id="cPolicy">—</span>
+    <span class="chip" id="cOutcome" style="display:none"></span>
+  </div>
+  <span class="chip" title="Todos los valores operacionales son hipótesis pedagógicas">supuesto de simulación</span>
+</header>
+<div class="body">
+<aside>
+  <div>
+    <h3>Configuración</h3>
+    <div class="grid2">
+      <div class="field"><label>Planeta</label><select id="fPlanet"></select></div>
+      <div class="field"><label>Modo</label><select id="fMode"><option value="rover">Rover (ruedas)</option><option value="sonda">Sonda atmosférica</option></select></div>
+      <div class="field"><label>Semilla</label><input id="fSeed" type="number" min="0" step="1" value="42"></div>
+      <div class="field"><label>Dificultad</label><select id="fDiff"><option value="low">Baja</option><option value="medium" selected>Media</option><option value="high">Alta</option></select></div>
+    </div>
+    <div class="field" style="margin-top:5px"><label>Batería inicial: <b id="lBat">100</b> %</label><input id="fBattery" type="range" min="0" max="100" step="1" value="100"></div>
+    <div class="field" style="margin-top:3px"><label>Política</label><select id="fPolicy"></select></div>
+    <div class="row" style="margin-top:6px"><button class="btn primary" id="bApply">Aplicar configuración</button></div>
+  </div>
+  <div>
+    <h3>Simulación</h3>
+    <div class="row"><button class="btn on" id="bRun">▶ Iniciar</button><button class="btn" id="bStep">Paso</button><button class="btn" id="bReset">Reiniciar</button></div>
+    <div class="field" style="margin-top:5px"><label>Velocidad: <b id="lSpeed">1</b>× pasos por ciclo</label><input id="fSpeed" type="range" min="1" max="8" step="1" value="1"></div>
+  </div>
+  <div>
+    <h3>Inyectar evento</h3>
+    <div class="events" id="events"></div>
+    <div class="field" style="margin-top:5px"><label>Editar terreno real (clic en el mapa)</label>
+      <select id="fTool"><option value="">Sin edición</option><option value="obstaculo">Colocar obstáculo</option><option value="barranco">Colocar barranco</option><option value="limpiar">Limpiar celda</option></select></div>
+  </div>
+  <div>
+    <h3>Exportar</h3>
+    <div class="row"><button class="btn" data-export="csv">Traza CSV</button><button class="btn" data-export="json">Misión JSON</button></div>
+  </div>
+  <div class="msg" id="msg">Listo. Configure la misión y presione Iniciar.</div>
+</aside>
+<main>
+  <div class="tabs">
+    <button class="tab active" data-view="mission">Misión</button>
+    <button class="tab" data-view="rna">Laboratorio RNA</button>
+    <button class="tab" data-view="fuzzy">Laboratorio Difuso</button>
+    <button class="tab" data-view="ga">Laboratorio Genético</button>
+    <button class="tab" data-view="compare">Comparación de políticas</button>
+  </div>
+
+  <section class="view active" id="v-mission">
+    <div class="panel" id="mapPanel">
+      <h3>Mapa y trayectoria en tiempo real <label class="tag"><input type="checkbox" id="fReveal" style="vertical-align:-2px"> mostrar terreno oculto</label></h3>
+      <div class="canvasBox"><canvas id="map"></canvas></div>
+      <div class="legend">
+        <span><i style="background:#ffd54a"></i>rover</span><span><i style="background:var(--accent)"></i>ruta ejecutada</span>
+        <span><i style="background:var(--ok)"></i>ruta planificada</span><span><i style="background:var(--violet)"></i>candidatas AG</span>
+        <span><i style="background:var(--rock)"></i>obstáculo</span><span><i style="background:var(--bad)"></i>barranco</span>
+        <span><i style="background:var(--warn)"></i>riesgo RNA</span><span><i style="background:var(--sci)"></i>sitio científico</span><span><i style="background:#2f8f5b"></i>refugio</span>
+      </div>
+    </div>
+    <div class="right">
+      <div class="panel">
+        <h3>Telemetría y eventos <span class="tag" id="tDay">día</span></h3>
+        <div class="tele" id="tele"></div>
+        <div class="sensors" id="sensors"></div>
+      </div>
+      <div class="panel">
+        <h3>Decisión explicable <span class="tag" id="tReason">—</span></h3>
+        <div class="why">
+          <div class="line rna"><div class="who">RNA</div><div class="what" id="wRna">—</div></div>
+          <div class="line fz"><div class="who">DIFUSA</div><div class="what" id="wFz">—</div></div>
+          <div class="line ga"><div class="who">AG</div><div class="what" id="wGa">—</div></div>
+          <div class="line sup" id="lSup"><div class="who">ÁRBITRO</div><div class="what" id="wSup">—</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="panel">
+        <h3>Traza temporal / historial de decisiones
+          <select id="fFilter" style="width:auto;padding:1px 4px;font-size:10.5px"><option value="">Todo</option><option value="veto">Vetos y alertas</option><option value="ga">Replanificaciones</option><option value="ev">Eventos</option></select></h3>
+        <div class="trace" id="trace"></div>
+      </div>
+      <div class="panel">
+        <h3>Evolución <span class="tag">batería · velocidad difusa · riesgo RNA · fitness AG</span></h3>
+        <div class="charts"><canvas id="cSeries"></canvas><canvas id="cFitness"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view lab" id="v-rna">
+    <div class="panel"><h3>Entrada de sensores <button class="btn" id="bRnaCur" style="font-size:10.5px;padding:2px 6px">Usar lectura actual</button></h3><div id="rnaSliders"></div>
+      <div class="small" style="margin-top:6px">La etiqueta de verdad la genera el simulador (pertenencia a barranco/obstáculo), no las variables que recibe la red: no hay fuga de etiqueta.</div></div>
+    <div class="panel"><h3>Predicción y confianza</h3><div class="probs" id="rnaProbs"></div><div id="rnaPred" style="margin-top:6px"></div></div>
+    <div class="panel"><h3>Capas ocultas (ReLU 32 → 16)</h3><div id="rnaLayers"></div></div>
+    <div class="panel"><h3>Métricas en test (mapas no vistos)</h3><div id="rnaMetrics"></div></div>
+    <div class="panel"><h3>Matriz de confusión (test)</h3><div id="rnaConf"></div></div>
+    <div class="panel"><h3>Partición por mapa</h3><div id="rnaSplit" class="small"></div></div>
+  </section>
+
+  <section class="view lab" id="v-fuzzy">
+    <div class="panel"><h3>Entradas crisp <button class="btn" id="bFzCur" style="font-size:10.5px;padding:2px 6px">Usar lectura actual</button></h3><div id="fzSliders"></div>
+      <div style="margin-top:8px"><span class="small">Velocidad (centroide)</span><div class="big" id="fzOut">—</div><div class="small" id="fzReason"></div></div></div>
+    <div class="panel" style="grid-column:2/4"><h3>Funciones de membresía (triangular / trapezoidal) y punto de entrada</h3><div class="mini4"><canvas id="fz0"></canvas><canvas id="fz1"></canvas><canvas id="fz2"></canvas><canvas id="fz3"></canvas></div></div>
+    <div class="panel" style="grid-column:1/3"><h3>Reglas Mamdani (min–max) <span class="tag" id="fzCount">—</span></h3><div class="scroll" id="fzRules"></div></div>
+    <div class="panel"><h3>Agregación y desfusificación</h3><div class="canvasBox"><canvas id="fzAgg"></canvas></div></div>
+  </section>
+
+  <section class="view lab" id="v-ga">
+    <div class="panel"><h3>Ejecución <select id="fRun" style="width:auto;flex:1;padding:1px 4px;font-size:10.5px"></select> gen. <span class="tag" id="gaGenLbl">—</span></h3><input type="range" id="fGen" min="0" max="0" value="0"><div id="gaOps" class="small" style="margin:5px 0"></div><div class="scroll" id="gaChrom"></div></div>
+    <div class="panel"><h3>Mejor fitness por generación</h3><div class="canvasBox"><canvas id="gaChart"></canvas></div><div class="small" id="gaInfo"></div></div>
+    <div class="panel"><h3>Pesos del fitness <span class="tag">normalizados</span></h3><div id="gaWeights"></div><div class="row" style="margin-top:6px"><button class="btn primary" id="bWeights">Aplicar pesos y reiniciar</button></div>
+      <div class="small" style="margin-top:6px">fitness = w1·ciencia − w2·distancia − w3·energía − w4·riesgo − w5·tiempo − P·inviabilidad</div></div>
+    <div class="panel" style="grid-column:1/4"><h3>Rutas candidatas: desglose de aptitud y vetos del supervisor</h3><div class="scroll" id="gaCand"></div></div>
+  </section>
+
+  <section class="view" id="v-compare" style="grid-template-rows:auto minmax(0,1fr) minmax(0,.8fr)">
+    <div class="panel"><div class="row" style="flex-wrap:wrap">
+      <div class="field" style="width:260px"><label>Escenario</label><select id="fScenario"></select></div>
+      <div class="field" style="width:120px"><label>Semillas</label><select id="fSeeds"><option>3</option><option selected>5</option><option>10</option><option>20</option></select></div>
+      <button class="btn primary" id="bCompare" style="flex:0;margin-top:13px">Ejecutar comparación</button>
+      <button class="btn" data-export="comparison_csv" style="flex:0;margin-top:13px">Exportar CSV</button>
+      <span class="small" style="margin-top:13px">Misma semilla y condiciones idénticas por política. 20 semillas toman ~1–2 min.</span></div></div>
+    <div class="panel"><h3>Métricas por política <span class="tag">media ± desv. (mediana)</span></h3><div class="scroll" id="cmpTable"><div class="small">Sin resultados todavía.</div></div></div>
+    <div class="panel"><h3>Éxito de misión y colisiones</h3><div class="canvasBox"><canvas id="cmpChart"></canvas></div></div>
+  </section>
+</main>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js"></script>
+<script>
+// Boots the Python engine (numpy + scikit-learn) inside the browser with Pyodide.
+window.ARES_BOOT = (async () => {
+  const box = document.createElement('div');
+  box.id = 'bootOverlay';
+  box.style.cssText = 'position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#070b12;color:#d7e2f0;font:14px system-ui,sans-serif';
+  box.innerHTML = '<b style="letter-spacing:.1em;color:#4cc3ff">ARES-X</b><span id="bootMsg">Cargando el motor Python en el navegador (Pyodide)…</span><small style="color:#7f93ad">numpy · scikit-learn · pandas — primera carga ~20–40 s</small>';
+  document.body.appendChild(box);
+  const say = t => { const m = document.getElementById('bootMsg'); if (m) m.textContent = t; };
+  const py = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/' });
+  say('Instalando numpy, scikit-learn y pandas…');
+  await py.loadPackage(['numpy', 'scikit-learn', 'pandas']);
+  say('Cargando módulos ARES-X y entrenando la RNA…');
+  const files = await (await fetch('py/manifest.json')).json();
+  py.FS.mkdirTree('/app/ares');
+  for (const name of files) py.FS.writeFile('/app/ares/' + name, await (await fetch('py/ares/' + name)).text());
+  await new Promise(r => setTimeout(r, 30));
+  py.runPython("import sys; sys.path.insert(0, '/app'); from ares.api import Session, handle_json; SESSION = Session()");
+  const handle = py.globals.get('handle_json'), session = py.globals.get('SESSION');
+  window.ARES_TRANSPORT = async (fn, args) => handle(session, fn, args);
+  box.remove();
+})();
+</script>
+<script>
+'use strict';
+// ---------------------------------------------------------------- transport
+async function api(fn, args){
+  args = args || {};
+  if (window.ARES_TRANSPORT) return JSON.parse(await window.ARES_TRANSPORT(fn, JSON.stringify(args)));
+  const colab = window.google && google.colab && google.colab.kernel;
+  if (colab && colab.invokeFunction){
+    const r = await colab.invokeFunction('ares_api', [fn, JSON.stringify(args)], {});
+    return r.data['application/json'];
+  }
+  const res = await fetch('api', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fn, args})});
+  return res.json();
+}
+const $ = id => document.getElementById(id);
+let S = null, META = null, running = false, busy = false, view = 'mission';
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function msg(text, err){ const m=$('msg'); m.textContent=text; m.className='msg'+(err?' err':''); }
+const fmt = (v, d=2) => v===null||v===undefined||Number.isNaN(v) ? '—' : (typeof v==='number' ? v.toFixed(d) : v);
+
+async function call(fn, args, quiet){
+  if (busy && fn==='step') return null;
+  busy = true;
+  try{
+    const out = await api(fn, args);
+    if (out && out.error){ msg(out.error, true); return null; }
+    if (out && out.status){ S = out; render(); }
+    if (!quiet && fn!=='step' && out && !out.error && out.status) msg('Hecho: ' + fn);
+    return out;
+  }catch(e){ msg('Error de comunicación con el motor Python: ' + e, true); running=false; syncRun(); return null; }
+  finally{ busy = false; }
+}
+
+// ---------------------------------------------------------------- canvas utils
+function ctx2d(c){ const r=c.getBoundingClientRect(); const dpr=window.devicePixelRatio||1;
+  const w=Math.max(10,Math.floor(r.width)), h=Math.max(10,Math.floor(r.height));
+  if (c.width!==w*dpr||c.height!==h*dpr){ c.width=w*dpr; c.height=h*dpr; }
+  const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h); return [g,w,h]; }
+function lineChart(c, series, opts){
+  const [g,w,h]=ctx2d(c); opts=opts||{}; const pad={l:30,r:8,t:14,b:14};
+  const all=series.flatMap(s=>s.data.filter(v=>v!==null&&v!==undefined));
+  let lo=opts.min!==undefined?opts.min:Math.min(...all,0), hi=opts.max!==undefined?opts.max:Math.max(...all,1);
+  if (hi===lo) hi=lo+1;
+  g.strokeStyle=css('--line'); g.lineWidth=1; g.fillStyle=css('--dim'); g.font='10px sans-serif';
+  for (let i=0;i<=2;i++){ const y=pad.t+(h-pad.t-pad.b)*i/2; g.beginPath(); g.moveTo(pad.l,y); g.lineTo(w-pad.r,y); g.stroke();
+    g.fillText((hi-(hi-lo)*i/2).toFixed(opts.digits??0),2,y+3); }
+  const n=Math.max(...series.map(s=>s.data.length),2);
+  series.forEach(s=>{ g.strokeStyle=s.color; g.lineWidth=1.6; g.beginPath(); let started=false;
+    s.data.forEach((v,i)=>{ if(v===null||v===undefined) return; const x=pad.l+(w-pad.l-pad.r)*i/(n-1), y=pad.t+(h-pad.t-pad.b)*(1-(v-lo)/(hi-lo));
+      started?g.lineTo(x,y):g.moveTo(x,y); started=true; }); g.stroke(); });
+  let x=pad.l; series.forEach(s=>{ g.fillStyle=s.color; g.fillRect(x,2,8,8); g.fillStyle=css('--muted'); g.fillText(s.name,x+11,10); x+=g.measureText(s.name).width+24; });
+  if (opts.title){ g.fillStyle=css('--dim'); g.textAlign='right'; g.fillText(opts.title,w-pad.r,10); g.textAlign='left'; }
+}
+
+// ---------------------------------------------------------------- map
+let mapGeom=null;
+function drawMap(){
+  if (!S) return; const c=$('map'); const [g,w,h]=ctx2d(c); const M=S.map;
+  const cs=Math.floor(Math.min(w/M.width, h/M.height)); const ox=Math.floor((w-cs*M.width)/2), oy=Math.floor((h-cs*M.height)/2);
+  mapGeom={cs,ox,oy};
+  const cx=(c)=>ox+c*cs+cs/2, cy=(r)=>oy+r*cs+cs/2;
+  let emin=Infinity, emax=-Infinity; M.elevation.forEach(row=>row.forEach(v=>{ if(v>-5){emin=Math.min(emin,v);emax=Math.max(emax,v);} }));
+  for (let r=0;r<M.height;r++) for (let c=0;c<M.width;c++){
+    const e=M.elevation[r][c]; const t=Math.max(0,Math.min(1,(e-emin)/((emax-emin)||1)));
+    g.fillStyle=`rgb(${20+t*26},${32+t*32},${46+t*36})`; g.fillRect(ox+c*cs,oy+r*cs,cs-1,cs-1);
+  }
+  const reveal=$('fReveal').checked;
+  M.risk.forEach(([r,c,v])=>{ g.fillStyle=`rgba(255,181,71,${Math.min(.65,v*.7)})`; g.fillRect(ox+c*cs,oy+r*cs,cs-1,cs-1); });
+  M.refuges.forEach(([r,c])=>{ g.fillStyle='#2f8f5b'; g.fillRect(ox+c*cs+2,oy+r*cs+2,cs-5,cs-5); g.fillStyle='#d9ffe9'; g.font=`bold ${cs*.42}px sans-serif`; g.textAlign='center'; g.fillText('R',cx(c),cy(r)+cs*.15); });
+  M.resources.forEach(([r,c])=>{ g.strokeStyle='#5f7da3'; g.strokeRect(ox+c*cs+cs*.3,oy+r*cs+cs*.3,cs*.4,cs*.4); });
+  const rock=(r,c,dashed)=>{ g.beginPath(); g.arc(cx(c),cy(r),cs*.36,0,7); if(dashed){ g.setLineDash([3,3]); g.strokeStyle=css('--rock'); g.lineWidth=1.5; g.stroke(); g.setLineDash([]);} else { g.fillStyle=css('--rock'); g.fill(); } };
+  const cliff=(r,c,dashed)=>{ const x=ox+c*cs, y=oy+r*cs; g.save(); g.beginPath(); g.rect(x+1,y+1,cs-3,cs-3); g.clip();
+    g.strokeStyle=dashed?'rgba(255,93,108,.55)':css('--bad'); g.lineWidth=dashed?1:2; if(dashed) g.setLineDash([3,3]);
+    for(let k=-cs;k<cs*2;k+=6){ g.beginPath(); g.moveTo(x+k,y); g.lineTo(x+k+cs,y+cs); g.stroke(); } g.restore(); g.setLineDash([]); };
+  M.obstacles.forEach(([r,c])=>rock(r,c,false)); M.cliffs.forEach(([r,c])=>cliff(r,c,false));
+  if (reveal){ M.hidden_obstacles.forEach(([r,c])=>rock(r,c,true)); M.hidden_cliffs.forEach(([r,c])=>cliff(r,c,true)); }
+  M.science.forEach(([r,c,done])=>{ g.beginPath(); g.moveTo(cx(c),cy(r)-cs*.32); g.lineTo(cx(c)+cs*.3,cy(r)); g.lineTo(cx(c),cy(r)+cs*.32); g.lineTo(cx(c)-cs*.3,cy(r)); g.closePath();
+    if(done){ g.fillStyle=css('--ok'); g.fill(); } else { g.strokeStyle=css('--sci'); g.lineWidth=2; g.stroke(); } });
+  const poly=(pts,color,width,dash)=>{ if(!pts||pts.length<2) return; g.strokeStyle=color; g.lineWidth=width; g.setLineDash(dash||[]); g.beginPath();
+    pts.forEach(([r,c],i)=>i?g.lineTo(cx(c),cy(r)):g.moveTo(cx(c),cy(r))); g.stroke(); g.setLineDash([]); };
+  (M.candidates||[]).forEach((route,i)=>{ if(i!==M.chosen) poly(route,'rgba(169,139,255,.45)',1.5,[2,4]); });
+  poly(M.route,css('--ok'),2,[6,4]);
+  poly(M.path,css('--accent'),2.6);
+  (M.events||[]).forEach(e=>{ if(!e.position) return; const [r,c]=e.position; g.strokeStyle='#ffd54a'; g.lineWidth=1; g.strokeRect(ox+c*cs+1,oy+r*cs+1,cs-3,cs-3); });
+  const [pr,pc]=S.status.position; g.save(); g.translate(cx(pc),cy(pr)); g.fillStyle='#ffd54a'; g.beginPath();
+  g.moveTo(0,-cs*.38); g.lineTo(cs*.32,cs*.3); g.lineTo(-cs*.32,cs*.3); g.closePath(); g.fill(); g.strokeStyle='#000'; g.lineWidth=1; g.stroke(); g.restore();
+  g.fillStyle=css('--dim'); g.font='9px sans-serif'; g.textAlign='center';
+  for (let c=0;c<M.width;c+=3) g.fillText(c,cx(c),oy-2>8?oy-2:9);
+  g.textAlign='left';
+}
+$('map').addEventListener('click', async ev=>{
+  const tool=$('fTool').value; if(!tool||!mapGeom||!S) return;
+  const r=$('map').getBoundingClientRect(); const c=Math.floor((ev.clientX-r.left-mapGeom.ox)/mapGeom.cs), row=Math.floor((ev.clientY-r.top-mapGeom.oy)/mapGeom.cs);
+  if(row<0||c<0||row>=S.map.height||c>=S.map.width) return;
+  const out=await call('place',{position:[row,c],kind:tool},true); if(out) msg(`Terreno editado en (${row},${c}): ${tool}. El rover debe descubrirlo con sus sensores.`);
+});
+
+// ---------------------------------------------------------------- mission view
+function kv(k,v,extra){ return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div>${extra||''}</div>`; }
+function render(){
+  if (!S) return; const st=S.status;
+  $('cPlanet').innerHTML=`<strong>${S.planet.name.toUpperCase()}</strong> · ${S.planet.mode==='rover'?'rover':'sonda'} · semilla ${S.config.seed}`;
+  const se=$('cState'); se.textContent=st.state; se.className='chip state st-'+st.state;
+  $('cStep').innerHTML=`SOL <strong>${String(Math.floor(st.step/60)+1).padStart(3,'0')}</strong> · paso <strong>${st.step}</strong>`;
+  $('cPolicy').innerHTML=`política: <strong>${S.policy_label}</strong>`;
+  const oc=$('cOutcome'); if(st.finished){ oc.style.display=''; oc.textContent=st.outcome; oc.className='chip state st-'+st.state; } else oc.style.display='none';
+  if (st.finished && running){ running=false; syncRun(); msg('Misión finalizada: '+st.outcome, st.state!=='EXITO'); }
+  $('tDay').textContent=(st.daylight?'día':'noche')+(st.storm?' · tormenta':'')+(st.link?'':' · sin enlace');
+  const T=S.telemetry; const bcol=st.battery<15?css('--bad'):st.battery<35?css('--warn'):css('--ok');
+  $('tele').innerHTML=[
+    kv('Batería %',fmt(st.battery,1),`<div class="bar"><span style="width:${st.battery}%;background:${bcol}"></span></div>`),
+    kv('Integridad %',fmt(st.health,0),`<div class="bar"><span style="width:${st.health}%;background:${st.health<40?css('--bad'):css('--ok')}"></span></div>`),
+    kv('Riesgo RNA',S.rna?fmt(1-S.rna.probabilities.libre,2):'—'), kv('Ciencia',Math.round(st.science*100)+' %'),
+    kv('T ext °C',fmt(T.temperature_external,1)), kv('T int °C',fmt(st.temperature_internal,1)), kv('Pendiente °',fmt(T.slope,1)), kv('Δ elev m',fmt(T.elevation_delta,1)),
+    kv('Proximidad m',fmt(T.distance,2)), kv('Visibilidad',fmt(st.visibility,2)), kv('Solar W',fmt(T.solar_power,1)),
+    kv('O₂ amb. %',fmt(T.oxygen_ambient,2)+' <span class="small">ref.</span>')].join('');
+  const nv=T.nav_valid||{}; const fails=st.sensor_failures||[];
+  $('sensors').innerHTML=[['proximidad','Proximidad'],['lidar','LIDAR']].map(([k,l])=>`<span class="dot ${nv[k]===false?'bad':''}">${l} ${nv[k]===false?'NaN':'OK'}</span>`).join('')+
+    `<span class="dot ${T.edge_cliff?'bad':''}">Borde ${T.edge_cliff?'¡BARRANCO!':'OK'}</span>`+
+    `<span class="dot ${st.link?'':'warn'}">Enlace ${st.link?'OK':'autónomo'}</span>`+(st.quake?'<span class="dot warn">Sismo</span>':'')+
+    (S.rna_error?`<span class="dot bad">RNA sin lectura</span>`:'')+(fails.length?`<span class="dot bad">Falla: ${fails.join(', ')}</span>`:'');
+  // explanation
+  const R=S.rna; $('wRna').innerHTML = R ? `celda (${R.cell}) → <b>${R.label}</b> p=${fmt(R.confidence,2)} · libre ${fmt(R.probabilities.libre,2)} · obst ${fmt(R.probabilities.obstaculo,2)} · barr ${fmt(R.probabilities.barranco,2)}${R.low_confidence?' · <span class="r-warn">baja confianza</span>':''}`
+    : (S.config.policy==='sin_rna'||S.config.policy==='control'||S.config.policy==='ag_puro' ? '<span class="small">desactivada en esta política</span>' : (S.rna_error?`<span class="r-veto">${S.rna_error}: fusión con sensor determinista</span>`:'—'));
+  const F=S.fuzzy; $('wFz').innerHTML = F ? `dist ${fmt(F.inputs.distance,1)} m · bat ${fmt(F.inputs.battery,0)} % · pend ${fmt(F.inputs.slope,1)}° → velocidad <b>${fmt(F.speed,2)}</b> · ${F.rules.length} reglas (${F.rules.slice(0,3).map(r=>'R'+r.id+'='+fmt(r.strength,2)).join(', ')})`
+    : (st.step===0 ? '—' : '<span class="small">desactivada: velocidad fija 0,50</span>');
+  const G=S.ga; const ch=G.candidates&&G.chosen!==null&&G.chosen!==undefined?G.candidates[G.chosen]:null;
+  $('wGa').innerHTML = G.mode==='ag' ? `${G.candidates.length} rutas · elegida #${G.chosen??'—'} fitness <b>${ch?fmt(ch.fitness,3):'—'}</b> · ${G.generations_run} gen${G.stopped_early?' (parada temprana)':''} · motivo ${G.reason}${G.rejected.length?` · <span class="r-veto">${G.rejected.length} vetada(s)</span>`:''}`
+    : (G.mode ? `<span class="small">${G.message||G.mode}</span>` : '—');
+  const D=S.decision; const sup=$('lSup');
+  if (D){ $('wSup').innerHTML=`<b>${D.action.toUpperCase()}</b> · ${D.explanation}${D.vetoes.length?' · veto: '+D.vetoes.join('; '):''}`; $('tReason').textContent=D.reason;
+    sup.className='line sup'+(['replanificar','detener'].includes(D.action)&&D.reason!=='R15_MISION_COMPLETA'?' veto':''); }
+  else { $('wSup').textContent='Esperando el primer paso.'; $('tReason').textContent='—'; }
+  renderTrace(); drawMap();
+  const ser=S.series;
+  lineChart($('cSeries'),[{name:'batería %',data:ser.battery,color:css('--ok')},{name:'velocidad×100',data:ser.speed.map(v=>v*100),color:css('--warn')},{name:'riesgo×100',data:ser.risk.map(v=>v===null?null:v*100),color:css('--bad')}],{min:0,max:100});
+  lineChart($('cFitness'),[{name:'mejor fitness AG',data:(G.history||[]).map(h=>h.best),color:css('--violet')},{name:'mejor factible',data:(G.history||[]).map(h=>h.best_feasible),color:css('--accent')}],{digits:2,title:'por generación (última planificación)'});
+  if (view!=='mission') renderView();
+}
+function renderTrace(){
+  const f=$('fFilter').value; let rows=S.log.slice().reverse();
+  if (f==='veto') rows=rows.filter(r=>/R0[0-8]|R1[0-3]/.test(r.reason));
+  if (f==='ga') rows=rows.filter(r=>r.ga!==null&&r.ga!==undefined);
+  if (f==='ev') rows=rows.filter(r=>r.events.length);
+  const cls=r=>/R0[0-6]|R10/.test(r)?'r-veto':/R0[7-9]|R1[1-3]/.test(r)?'r-warn':'r-ok';
+  $('trace').innerHTML='<table><tr><th>T+</th><th>estado</th><th>acción</th><th>motivo</th><th>bat</th><th>RNA</th><th>vel</th><th>detalle</th></tr>'+
+    rows.map(r=>`<tr><td>${String(r.step).padStart(4,'0')}</td><td>${r.state}</td><td>${r.action}</td><td class="${cls(r.reason)}">${r.reason}</td><td>${fmt(r.battery,1)}</td><td>${r.rna?r.rna+' '+fmt(r.conf,2):'—'}</td><td>${fmt(r.speed,2)}</td><td class="x">${r.events.length?'<b>⚡ '+r.events.join(', ')+'</b> · ':''}${r.ga!==null&&r.ga!==undefined?'AG fitness '+fmt(r.ga,3)+' · ':''}${r.explanation}</td></tr>`).join('')+'</table>';
+}
+$('fFilter').addEventListener('change',renderTrace);
+$('fReveal').addEventListener('change',drawMap);
+
+// ---------------------------------------------------------------- RNA lab
+const RNA_RANGES={distance:[.01,20,.01,'m'],slope:[0,45,.5,'°'],elevation_delta:[-15,10,.1,'m'],texture:[0,1,.01,''],visibility:[.35,1,.01,''],vibration:[0,5,.05,'']};
+const RNA_LABELS={distance:'Distancia',slope:'Pendiente',elevation_delta:'Δ elevación',texture:'Textura',visibility:'Visibilidad',vibration:'Vibración'};
+function buildRnaSliders(){ $('rnaSliders').innerHTML=Object.entries(RNA_RANGES).map(([k,[lo,hi,st]])=>`<div class="slider"><label>${RNA_LABELS[k]}</label><input type="range" id="rn_${k}" min="${lo}" max="${hi}" step="${st}" value="${k==='distance'?10:k==='visibility'?1:k==='texture'?.25:0}"><span id="rv_${k}"></span></div>`).join('');
+  Object.keys(RNA_RANGES).forEach(k=>$('rn_'+k).addEventListener('input',rnaEval)); }
+let rnaTimer=null;
+function rnaEval(){ Object.keys(RNA_RANGES).forEach(k=>$('rv_'+k).textContent=(+$('rn_'+k).value).toFixed(2)); clearTimeout(rnaTimer); rnaTimer=setTimeout(async()=>{
+  const args={}; Object.keys(RNA_RANGES).forEach(k=>args[k]=+$('rn_'+k).value);
+  const out=await api('rna_eval',args); if(out.error){ msg(out.error,true); return; }
+  const colors={libre:css('--ok'),obstaculo:css('--rock'),barranco:css('--bad')};
+  $('rnaProbs').innerHTML=Object.entries(out.probabilities).map(([k,v])=>`<div class="p"><span>${k}</span><div class="track"><span style="width:${v*100}%;background:${colors[k]}"></span></div><span>${fmt(v,3)}</span></div>`).join('');
+  $('rnaPred').innerHTML=`<div class="big">${out.label}</div><div class="small">confianza ${fmt(out.confidence,3)} ${out.low_confidence?'<span class="r-warn">· baja confianza → fusión con sensor determinista y modo conservador</span>':''}<br>riesgo para AG = 0,7·p(obstáculo)+p(barranco) = ${fmt(out.risk,3)}</div>
+    <div class="small" style="margin-top:6px">entrada normalizada (z): [${out.normalized.map(v=>fmt(v,2)).join(', ')}]</div>`;
+  $('rnaLayers').innerHTML=out.layers.map((l,i)=>`<div class="kv" style="margin-bottom:6px"><div class="k">Capa oculta ${i+1} · ${l.neurons} neuronas</div><div class="v" style="font-size:11.5px">media ${fmt(l.mean,3)} · máx ${fmt(l.max,3)} · activas ${Math.round(l.active_fraction*100)} %</div><div class="bar"><span style="width:${l.active_fraction*100}%;background:var(--accent)"></span></div></div>`).join('')+
+    '<div class="small">Salida softmax de 3 clases → acción posterior: veto del supervisor si p ≥ 0,65 y la clase no es «libre».</div>';
+},120); }
+$('bRnaCur').addEventListener('click',()=>{ if(!S||!S.rna){ msg('No hay lectura RNA actual (ejecute pasos con una política que use RNA).',true); return; } Object.entries(S.rna.features).forEach(([k,v])=>{ $('rn_'+k).value=v; }); rnaEval(); });
+function renderRnaStatic(){ if(!S) return; const t=S.nn.test;
+  $('rnaMetrics').innerHTML=[kv('Exactitud',fmt(t.accuracy,3)),kv('Baseline mayoría',fmt(t.majority_baseline,3)),kv('Macro-F1',fmt(t.macro_f1,3)),kv('Recall barranco',fmt(t.barranco_recall,3)),kv('Error de calibración',fmt(t.calibration_error,3)),kv('Muestras test',t.samples),kv('Iteraciones',S.nn.iterations),kv('Entrenamiento s',fmt(S.nn.train_seconds,2))].map(x=>x).join('').replace(/^/,'<div class="tele" style="grid-template-columns:1fr 1fr">')+'</div>';
+  const L=t.labels; $('rnaConf').innerHTML=`<table class="mt"><tr><th>real \\ pred</th>${L.map(l=>`<th>${l}</th>`).join('')}</tr>${t.confusion_matrix.map((row,i)=>`<tr><th>${L[i]}</th>${row.map((v,j)=>`<td style="background:${i===j?'rgba(53,208,127,.15)':v?'rgba(255,93,108,.12)':''}">${v}</td>`).join('')}</tr>`).join('')}</table><div class="small" style="margin-top:6px">Validación: exactitud ${fmt(S.nn.validation.accuracy,3)} · macro-F1 ${fmt(S.nn.validation.macro_f1,3)}</div>`;
+  const sp=S.nn.split_maps; $('rnaSplit').innerHTML=`Los datos se separan <b>por mapa</b> (no por filas), evitando filas correlacionadas entre particiones.<br><br>Entrenamiento: mapas ${sp.train.join(', ')}<br>Validación: mapas ${sp.validation.join(', ')}<br>Test: mapas ${sp.test.join(', ')}<br><br>Muestras de entrenamiento: ${S.nn.training_samples} · MLP (32,16) ReLU · softmax · CPU scikit-learn.`;
+}
+
+// ---------------------------------------------------------------- fuzzy lab
+const FZ=[['distance','Distancia a riesgo','m',0,20,.1],['battery','Batería','%',0,100,1],['slope','Pendiente','°',0,45,.5],['temperature','Temperatura interna','°C',-80,120,1]];
+function buildFzSliders(){ $('fzSliders').innerHTML=FZ.map(([k,l,u,lo,hi,st])=>`<div class="slider"><label>${l}</label><input type="range" id="fz_${k}" min="${lo}" max="${hi}" step="${st}" value="${k==='distance'?10:k==='battery'?60:k==='slope'?5:12}"><span id="fv_${k}"></span></div>`).join('');
+  FZ.forEach(([k])=>$('fz_'+k).addEventListener('input',fzEval)); }
+let fzTimer=null, lastFz=null;
+function fzEval(){ FZ.forEach(([k,,u])=>$('fv_'+k).textContent=(+$('fz_'+k).value).toFixed(1)+u); clearTimeout(fzTimer); fzTimer=setTimeout(async()=>{
+  const out=await api('fuzzy_eval',{distance:+$('fz_distance').value,battery:+$('fz_battery').value,slope:+$('fz_slope').value,temperature:+$('fz_temperature').value});
+  if(out.error){ msg(out.error,true); return; } lastFz=out; drawFz(); },90); }
+const SETCOL=['#4cc3ff','#ffb547','#ff5d6c','#35d07f'];
+const VARES={distance:'distancia',battery:'batería',slope:'pendiente',temperature:'temperatura'};
+function drawFz(){ if(!META||!lastFz) return; const out=lastFz;
+  $('fzOut').textContent=fmt(out.speed,3); $('fzReason').innerHTML=out.reason==='SIN_REGLAS_ACTIVAS'?`<span class="r-warn">${out.fallback}</span>`:`cautela ${fmt(out.caution,3)} · ${out.reason}`;
+  FZ.forEach(([k,l],i)=>{ const set=META.fuzzy_sets[k]; const c=$('fz'+i); const [g,w,h]=ctx2d(c); const pad=16; const xs=set.x; const lo=xs[0], hi=xs[xs.length-1];
+    g.fillStyle=css('--muted'); g.font='10px sans-serif'; g.fillText(l,4,10);
+    Object.entries(set.sets).forEach(([name,ys],j)=>{ g.strokeStyle=SETCOL[j]; g.lineWidth=1.6; g.beginPath(); ys.forEach((y,n)=>{ const X=pad+(w-2*pad)*(xs[n]-lo)/(hi-lo), Y=h-pad-(h-2*pad-8)*y; n?g.lineTo(X,Y):g.moveTo(X,Y); }); g.stroke();
+      const deg=(out.degrees[k]||{})[name]; g.fillStyle=SETCOL[j]; g.fillText(`${name} ${deg!==undefined?fmt(deg,2):''}`,pad+j*((w-2*pad)/3.2),h-3); });
+    const v=+$('fz_'+k).value; const X=pad+(w-2*pad)*(v-lo)/(hi-lo); g.strokeStyle='#fff'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(X,14); g.lineTo(X,h-pad); g.stroke(); g.setLineDash([]); });
+  const active=new Map(out.rules.map(r=>[r.id,r.strength]));
+  $('fzCount').textContent=`${out.rules.length} de ${out.all_rules.length} activas`;
+  $('fzRules').innerHTML=out.all_rules.map(r=>`<div class="rule ${active.has(r.id)?'act':''}"><b>R${r.id}</b><span>SI ${r.antecedents.map(([v,s])=>`${VARES[v]||v} es <i>${s}</i>`).join(' Y ')} → velocidad <i>${r.consequent}</i><br><span class="small">${r.description}</span></span><b>${active.has(r.id)?fmt(active.get(r.id),2):'0'}</b></div>`).join('');
+  const sp=META.fuzzy_sets.speed; const c=$('fzAgg'); const [g,w,h]=ctx2d(c); const pad=16;
+  Object.entries(sp.sets).forEach(([name,ys],j)=>{ g.strokeStyle=SETCOL[j]+'88'; g.lineWidth=1; g.beginPath(); ys.forEach((y,n)=>{ const X=pad+(w-2*pad)*sp.x[n], Y=h-pad-(h-2*pad-10)*y; n?g.lineTo(X,Y):g.moveTo(X,Y); }); g.stroke(); g.fillStyle=SETCOL[j]; g.font='10px sans-serif'; g.fillText(name,pad+j*((w-2*pad)/4),12); });
+  const cur=out.curve; if(cur.length){ g.fillStyle='rgba(255,181,71,.35)'; g.strokeStyle=css('--warn'); g.lineWidth=2; g.beginPath(); g.moveTo(pad,h-pad);
+    cur.forEach((y,n)=>{ g.lineTo(pad+(w-2*pad)*n/(cur.length-1), h-pad-(h-2*pad-10)*y); }); g.lineTo(w-pad,h-pad); g.closePath(); g.fill(); g.stroke(); }
+  const X=pad+(w-2*pad)*out.centroid; g.strokeStyle='#fff'; g.lineWidth=2; g.beginPath(); g.moveTo(X,14); g.lineTo(X,h-pad); g.stroke(); g.fillStyle='#fff'; g.fillText('centroide '+fmt(out.centroid,3),Math.min(X+4,w-90),26);
+}
+$('bFzCur').addEventListener('click',()=>{ if(!S||!S.fuzzy){ msg('No hay inferencia difusa actual en esta política.',true); return; } const I=S.fuzzy.inputs; $('fz_distance').value=I.distance; $('fz_battery').value=I.battery; $('fz_slope').value=I.slope; $('fz_temperature').value=I.temperature; fzEval(); });
+
+// ---------------------------------------------------------------- GA lab
+const WNAMES={science:'w1 ciencia',distance:'w2 distancia',energy:'w3 energía',predicted_risk:'w4 riesgo',time:'w5 tiempo'};
+function buildWeights(){ const w=(S&&S.ga.weights)||{science:3,distance:1,energy:1,predicted_risk:2,time:1};
+  $('gaWeights').innerHTML=Object.entries(WNAMES).map(([k,l])=>`<div class="slider"><label>${l}</label><input type="range" id="w_${k}" min="0" max="6" step=".1" value="${w[k]??1}"><span id="wv_${k}">${fmt(w[k]??1,1)}</span></div>`).join('');
+  Object.keys(WNAMES).forEach(k=>$('w_'+k).addEventListener('input',()=>$('wv_'+k).textContent=(+$('w_'+k).value).toFixed(1))); }
+$('bWeights').addEventListener('click',async()=>{ const weights={}; Object.keys(WNAMES).forEach(k=>weights[k]=+$('w_'+k).value); const out=await call('configure',{...formConfig(),weights}); if(out){ msg('Pesos aplicados; misión reiniciada con la misma semilla.'); } });
+let gaRunSel=null;
+function runArg(){ return gaRunSel===null?{}:{run:gaRunSel}; }
+async function gaGen(){ const g=+$('fGen').value; const out=await api('ga_generation',{generation:g,...runArg()}); if(out.error){ $('gaChrom').innerHTML=`<div class="small">${out.error}</div>`; return; }
+  $('gaGenLbl').textContent=`${out.generation} / ${out.total-1}`;
+  $('gaOps').innerHTML=`Operadores hacia esta generación: torneos ${out.tournaments} · cruces ${out.crossovers} · genes mutados ${out.mutations} · élite 2 · mejor ${fmt(out.best,3)}`;
+  $('gaChrom').innerHTML='<table class="mt"><tr><th>#</th><th>cromosoma (puntos de paso)</th><th>fitness</th><th>factible</th></tr>'+out.rows.map((r,i)=>`<tr><td>${i}</td><td style="text-align:left">${r.chromosome.map(p=>`(${p})`).join(' → ')}</td><td>${fmt(r.fitness,3)}</td><td>${r.feasible?'<span class="pill ok">sí</span>':`<span class="pill bad">${r.violations.join(',')}</span>`}</td></tr>`).join('')+'</table>';
+}
+$('fGen').addEventListener('input',()=>{ clearTimeout(window._gt); window._gt=setTimeout(gaGen,80); });
+$('fRun').addEventListener('change',()=>{ gaRunSel=+$('fRun').value; $('fGen').value=5; renderGa(); });
+async function renderGa(){ if(!S) return; const runs=S.ga_runs||[];
+  $('fRun').innerHTML=runs.length?runs.map(r=>`<option value="${r.index}">#${r.index} · paso ${r.step} · ${r.reason}</option>`).join(''):'<option>sin ejecuciones del AG</option>';
+  if(gaRunSel!==null && gaRunSel>=runs.length) gaRunSel=null;
+  $('fRun').value=gaRunSel===null?Math.max(0,runs.length-1):gaRunSel;
+  let G=S.ga; if(runs.length){ const out=await api('ga_run',runArg()); if(!out.error) G=out.ga; }
+  const n=(G.history||[]).length;
+  $('fGen').max=Math.max(0,n-1); if(+$('fGen').value>n-1) $('fGen').value=Math.max(0,n-1);
+  lineChart($('gaChart'),[{name:'mejor',data:G.history.map(h=>h.best),color:css('--violet')},{name:'mejor factible',data:G.history.map(h=>h.best_feasible),color:css('--accent')}],{digits:2});
+  $('gaInfo').innerHTML=G.mode==='ag'?`Población 30 · ${G.generations_run} generaciones${G.stopped_early?' (parada temprana: 10 sin mejora)':''} · torneo 3 · elitismo 2 · semilla controlada · ${G.message}`:`<span class="r-warn">${G.message||'La política actual no usa el AG.'}</span>`;
+  const rej=new Map((G.rejected||[]).map(r=>[r.index,r]));
+  $('gaCand').innerHTML=G.candidates.length?'<table class="mt"><tr><th>#</th><th>estado</th><th>fitness</th><th>ciencia</th><th>distancia</th><th>energía</th><th>riesgo</th><th>tiempo</th><th>penalización</th><th>orden científico</th><th>celdas</th></tr>'+
+    G.candidates.map(c=>`<tr style="${c.index===G.chosen?'background:rgba(53,208,127,.12)':''}"><td>${c.index}</td><td>${c.index===G.chosen?'<span class="pill ok">ELEGIDA</span>':rej.has(c.index)?`<span class="pill bad">vetada: ${rej.get(c.index).reason}</span>`:'alternativa'}</td><td>${fmt(c.fitness,3)}</td>${['science','distance','energy','predicted_risk','time'].map(k=>`<td>${fmt(c.components[k],3)}</td>`).join('')}<td>${fmt(c.penalty,2)}</td><td style="text-align:left">${c.science_order.map(p=>`(${p})`).join(' → ')||'—'}</td><td>${c.distance}</td></tr>`).join('')+'</table>'
+    :'<div class="small">Sin candidatas (la política actual no usa AG o aún no se planificó).</div>';
+  gaGen();
+}
+
+// ---------------------------------------------------------------- comparison
+$('bCompare').addEventListener('click',async()=>{ running=false; syncRun(); msg('Ejecutando comparación… (las 6 políticas con las mismas semillas)');
+  $('bCompare').disabled=true; const out=await api('compare',{seeds:+$('fSeeds').value,scenario:$('fScenario').value}); $('bCompare').disabled=false;
+  if(out.error){ msg(out.error,true); return; } if(S) S.comparison=out; renderCompare(); msg('Comparación lista: '+out.label+', '+out.seeds+' semillas por política.'); });
+function renderCompare(){ const C=S&&S.comparison; if(!C) return;
+  const cols=[['success','éxito',2],['collisions','colisiones',2],['safety_violations','violaciones',2],['cliffs_avoided','barrancos evitados',2],['hazards_avoided','peligros RNA',2],['battery_left','energía rest.',1],['distance','distancia',1],['science','ciencia',2],['replans','replan.',1],['decision_ms','ms/decisión',2]];
+  $('cmpTable').innerHTML=`<div class="small" style="margin-bottom:4px">${C.label} · n=${C.seeds} semillas por política</div><table class="mt"><tr><th>política</th>${cols.map(c=>`<th>${c[1]}</th>`).join('')}</tr>`+
+    C.summary.map(r=>`<tr><td style="text-align:left">${r.label}</td>${cols.map(([k,,d])=>`<td>${fmt(r[k].media,d)} ± ${fmt(r[k].desv,d)}<br><span class="small">(${fmt(r[k].mediana,d)})</span></td>`).join('')}</tr>`).join('')+'</table>';
+  const c=$('cmpChart'); const [g,w,h]=ctx2d(c); const n=C.summary.length; const bw=(w-40)/n; const pad=18;
+  C.summary.forEach((r,i)=>{ const x=30+i*bw; const s=r.success.media, col=r.collisions.media;
+    g.fillStyle=css('--ok'); g.fillRect(x+bw*.15,h-pad-(h-2*pad)*s,bw*.32,(h-2*pad)*s);
+    const cc=Math.min(1,col/3); g.fillStyle=css('--bad'); g.fillRect(x+bw*.52,h-pad-(h-2*pad)*cc,bw*.32,(h-2*pad)*cc);
+    g.fillStyle=css('--muted'); g.font='10px sans-serif'; g.textAlign='center'; g.fillText(r.policy,x+bw/2,h-4); g.fillText(fmt(s*100,0)+'%',x+bw*.31,h-pad-(h-2*pad)*s-3); g.fillText(fmt(col,1),x+bw*.68,h-pad-(h-2*pad)*cc-3); });
+  g.textAlign='left'; g.fillStyle=css('--ok'); g.fillRect(30,2,8,8); g.fillStyle=css('--muted'); g.fillText('éxito %',42,10); g.fillStyle=css('--bad'); g.fillRect(100,2,8,8); g.fillStyle=css('--muted'); g.fillText('colisiones (escala 0–3)',112,10);
+}
+
+// ---------------------------------------------------------------- controls
+function formConfig(){ return {planet:$('fPlanet').value, mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value}; }
+function syncRun(){ const b=$('bRun'); b.textContent=running?'⏸ Pausa':'▶ Iniciar'; b.className='btn '+(running?'':'on'); }
+async function loop(){ if(!running) return; const n=+$('fSpeed').value; await call('step',{n},true); if(running && S && !S.status.finished) setTimeout(loop, 260); else { running=false; syncRun(); } }
+$('bRun').addEventListener('click',()=>{ if(S&&S.status.finished){ msg('La misión terminó. Reinicie o cambie la configuración.'); return; } running=!running; syncRun(); if(running){ msg('Simulación en curso.'); loop(); } else msg('Pausada.'); });
+$('bStep').addEventListener('click',()=>{ running=false; syncRun(); call('step',{n:1},true); });
+$('bReset').addEventListener('click',async()=>{ running=false; syncRun(); if(await call('reset',{},true)) msg('Misión reiniciada con la misma semilla.'); });
+$('bApply').addEventListener('click',async()=>{ running=false; syncRun(); const out=await call('configure',formConfig(),true); if(out) msg('Configuración válida aplicada. Nuevo mapa generado.'); });
+$('fBattery').addEventListener('input',()=>$('lBat').textContent=$('fBattery').value);
+$('fSpeed').addEventListener('input',()=>$('lSpeed').textContent=$('fSpeed').value);
+$('fPlanet').addEventListener('change',async()=>{ const v=await api('validate',formConfig()); if(v.error){ msg(v.error,true); if(/sonda/.test(v.error)) { $('fMode').value='sonda'; msg(v.error+' Se propone modo sonda (aplicar para confirmar).',true);} } else msg('Configuración compatible. Presione Aplicar.'); });
+$('fMode').addEventListener('change',async()=>{ const v=await api('validate',formConfig()); msg(v.error||'Configuración compatible. Presione Aplicar.',!!v.error); });
+document.querySelectorAll('[data-export]').forEach(b=>b.addEventListener('click',async()=>{ const out=await api('export',{format:b.dataset.export}); if(out.error){ msg(out.error,true); return; }
+  const blob=new Blob([out.content],{type:'text/plain;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=out.filename; document.body.appendChild(a); a.click(); a.remove(); msg('Exportado '+out.filename); }));
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{ document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));
+  view=t.dataset.view; document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='v-'+view)); renderView(); if(view==='mission') render(); }));
+function renderView(){ if(view==='rna'){ renderRnaStatic(); rnaEval(); } if(view==='fuzzy') fzEval(); if(view==='ga'){ buildWeights(); renderGa(); } if(view==='compare') renderCompare(); }
+window.addEventListener('resize',()=>{ clearTimeout(window._rt); window._rt=setTimeout(()=>{ render(); if(view==='fuzzy') drawFz(); if(view==='compare') renderCompare(); },120); });
+
+async function init(){
+  META=await api('meta'); if(META.error){ msg(META.error,true); return; }
+  $('fPlanet').innerHTML=META.planets.map(p=>`<option value="${p.name}">${p.name}${p.rocky?'':' (gigante)'}</option>`).join('');
+  $('fPolicy').innerHTML=Object.entries(META.policies).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  $('fScenario').innerHTML=Object.entries(META.scenarios).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+  $('events').innerHTML=Object.entries(META.events).map(([k,v])=>`<button class="btn" data-ev="${k}" title="${v}">${v}</button>`).join('')+
+    '<button class="btn" data-ev="falla_sensor" data-sensor="todos" title="Fallan proximidad y LIDAR">Falla total navegación</button>';
+  document.querySelectorAll('[data-ev]').forEach(b=>b.addEventListener('click',async()=>{ const args={kind:b.dataset.ev}; if(b.dataset.sensor) args.sensor=b.dataset.sensor;
+    const out=await call('inject',args,true); if(out) msg('Evento inyectado: '+b.title+'. '+((out.status&&S.map.events.length)?'':'')); }));
+  buildRnaSliders(); buildFzSliders();
+  await call('state',{},true);
+  $('fPlanet').value=S.config.planet; $('fMode').value=S.config.mode==='rover'?'rover':'sonda'; $('fSeed').value=S.config.seed; $('fDiff').value=S.config.difficulty; $('fBattery').value=S.config.battery; $('lBat').textContent=S.config.battery; $('fPolicy').value=S.config.policy;
+}
+if (window.ARES_BOOT) window.ARES_BOOT.then(init).catch(e=>msg('No se pudo iniciar el motor Python: '+e,true)); else init();
+</script>
+</body>
+</html>
