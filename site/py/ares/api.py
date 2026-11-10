@@ -92,7 +92,7 @@ class Session:
         readings = last.get('readings') or {}
         fuzzy = last.get('fuzzy')
         log = [dict(step=t['step'], state=t['state'], action=t['action'], reason=t['reason'],
-                    battery=t['battery'], explanation=t['explanation'],
+                    battery=t['battery'], explanation=t['explanation'], moved=t['moved'],
                     events=[e['label'] for e in t['events']],
                     rna=(t['rna'] or {}).get('label'), conf=(t['rna'] or {}).get('confidence'),
                     speed=t['crisp_speed'], ga=(t['ga'] or {}).get('best_fitness')) for t in trace[-60:]]
@@ -153,7 +153,12 @@ class Session:
             comparison=self.comparison))
 
     def meta(self):
-        return clean(dict(version=VERSION, planets=[dict(key=k, name=v[0], rocky=v[1]) for k, v in PROFILES.items()],
+        model = shared_perception(0).model
+        network = dict(layers=[len(FEATURES)] + list(model.hidden_layer_sizes) + [len(model.classes_)],
+                       classes=list(model.classes_),
+                       coefs=[[[_r(v, 3) for v in row] for row in layer.tolist()] for layer in model.coefs_],
+                       intercepts=[[_r(v, 3) for v in layer.tolist()] for layer in model.intercepts_])
+        return clean(dict(version=VERSION, network=network, planets=[dict(key=k, name=v[0], rocky=v[1]) for k, v in PROFILES.items()],
                           policies={k: v['label'] for k, v in POLICIES.items()}, events=EVENT_LABELS,
                           scenarios={k: v['label'] for k, v in SCENARIOS.items()}, reasons=REASONS,
                           features=list(FEATURES), fuzzy_sets=fuzzy_sets(), operational_label=ASSUMPTION))

@@ -67,7 +67,8 @@ def validate_config(config):
     """Return a normalized config or raise ValueError with a readable message."""
     cfg = dict(planet='Marte', mode='rover', seed=42, difficulty='medium', battery=100.,
                policy='hibrido', step_duration=1., science_count=5, thermal_limit=70.,
-               weights=None, hidden_cliffs=4)
+               weights=None, hidden_cliffs=4, ga_population=30, ga_generations=30,
+               ga_crossover=.85, ga_mutation=.25)
     cfg.update({k: v for k, v in (config or {}).items() if v is not None})
     if normalize(str(cfg['planet'])) not in PROFILES:
         raise ValueError(f"Planeta desconocido: {cfg['planet']}")
@@ -80,7 +81,15 @@ def validate_config(config):
             raise ValueError(f'{key}: debe ser un número') from None
         if not math.isfinite(cfg[key]) or not low <= cfg[key] <= high:
             raise ValueError(f'{key}: valor imposible ({cfg[key]}); rango permitido {low}–{high}')
-    for key, low, high in (('seed', 0, 2**31 - 1), ('science_count', 0, 12), ('hidden_cliffs', 0, 12)):
+    for key in ('ga_crossover', 'ga_mutation'):
+        try:
+            cfg[key] = float(cfg[key])
+        except (TypeError, ValueError):
+            raise ValueError(f'{key}: debe ser un número') from None
+        if not math.isfinite(cfg[key]) or not 0 <= cfg[key] <= 1:
+            raise ValueError(f'{key}: probabilidad imposible ({cfg[key]}); rango 0–1')
+    for key, low, high in (('seed', 0, 2**31 - 1), ('science_count', 0, 12), ('hidden_cliffs', 0, 12),
+                           ('ga_population', 30, 120), ('ga_generations', 30, 150)):
         value = cfg[key]
         if isinstance(value, float) and value.is_integer():
             value = int(value)
@@ -329,8 +338,10 @@ class HybridMission:
 
     def _plan_ga(self, reason):
         self.metrics['ga_runs'] += 1
-        planner = CachedPlanner(population_size=30, generations=30, waypoints=3,
-                                seed=self.seed + self.metrics['ga_runs'], weights=self.config['weights'])
+        cfg = self.config
+        planner = CachedPlanner(population_size=cfg['ga_population'], generations=cfg['ga_generations'], waypoints=3,
+                                seed=self.seed + self.metrics['ga_runs'], weights=cfg['weights'],
+                                crossover_rate=cfg['ga_crossover'], mutation_rate=cfg['ga_mutation'])
         goal = self.home
         risk = self.risk_map()
         kwargs = dict(temperature=self.temperature_internal, thermal_limit=self.config['thermal_limit'],

@@ -37,8 +37,8 @@ window.ARES_BOOT = (async () => {{
 
 
 def main():
-    if SITE.exists():
-        shutil.rmtree(SITE)
+    if (SITE / 'py').exists():
+        shutil.rmtree(SITE / 'py')  # keep site/.vercel (project link)
     (SITE / 'py' / 'ares').mkdir(parents=True)
     page = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
     page = page.replace('<script>\n\'use strict\';', BOOT + '<script>\n\'use strict\';', 1)
