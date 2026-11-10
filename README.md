@@ -23,7 +23,7 @@ archivos locales.
 python -m venv .venv
 .venv/bin/pip install numpy pandas scikit-learn matplotlib pytest
 .venv/bin/python server.py          # http://127.0.0.1:8765
-.venv/bin/python -m pytest -q       # 117 pruebas
+.venv/bin/python -m pytest -q       # 123 pruebas
 .venv/bin/python build_notebook.py  # regenera ARES_X_Rover.ipynb desde src/ y web/
 ```
 

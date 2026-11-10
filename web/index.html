@@ -370,7 +370,7 @@ function buildDynamic(){
     if(d>2.2&&!known.has(key([r,c]))&&!cliffs.has(key([r,c]))){ const [x,z]=cellXZ(r,c,M); V.dyn.add(tile(x,z,0xe8e05a,.16)); } }
   (M.events||[]).forEach(e=>{ if(!e.position) return; const [x,z]=cellXZ(e.position[0],e.position[1],M);
     if(e.kind==='meteorito'){ V.dyn.add(tile(x,z,0xd07bff,.35,CS*2.6)); }
-    if(e.kind==='alienigena'){ const a=new THREE.Mesh(new THREE.CapsuleGeometry?new THREE.CylinderGeometry(.35,.35,1.6,12):new THREE.CylinderGeometry(.35,.35,1.6,12),new THREE.MeshStandardMaterial({color:0x7dff9a,emissive:0x2aff6a,emissiveIntensity:.8,transparent:true,opacity:.75})); a.position.set(x,heightAt(x,z)+1,z); a.userData.alien=true; V.dyn.add(a); } });
+    if(e.kind==='alienigena'){ const a=new THREE.Mesh(new THREE.CylinderGeometry(.3,.38,1.6,12),new THREE.MeshStandardMaterial({color:0x7dff9a,emissive:0x2aff6a,emissiveIntensity:.8,transparent:true,opacity:.75})); a.position.set(x,heightAt(x,z)+1,z); a.userData.alien=true; V.dyn.add(a); } });
   // refuges
   M.refuges.forEach(([r,c])=>{ const [x,z]=cellXZ(r,c,M), y=heightAt(x,z);
     const pad=new THREE.Mesh(new THREE.CylinderGeometry(.95,1.05,.12,24),new THREE.MeshStandardMaterial({color:0x4b4f55,roughness:.7})); pad.position.set(x,y+.06,z); pad.receiveShadow=true;
@@ -469,7 +469,9 @@ $('fReveal').addEventListener('change',()=>{ if(S) buildDynamic(); });
 // ------------------------------------------------------------ render
 function render(){ if(!S) return; const st=S.status;
   window._lastMoved=S.log.length&&S.log[S.log.length-1].step===st.step?(S.log[S.log.length-1].moved||[]):[];
-  renderTelemetry(); renderTop(); sync3d(); renderNN(); renderFuzzy(); renderGA(); renderLog();
+  renderTelemetry(); renderTop();
+  try{ sync3d(); }catch(e){ console.error(e); msg('Error al dibujar la escena 3D: '+e.message,true); } // never freeze the panels
+  renderNN(); renderFuzzy(); renderGA(); renderLog();
   if(st.finished&&running){ running=false; syncRun(); msg('Misión finalizada: '+st.outcome,st.state!=='EXITO'); } }
 function tl(name,unit,val,status,chipText){ return `<div class="tl ${status}"><div><div class="n">${name}</div><div class="u">${unit}</div></div><div class="v">${val}</div><span class="chip ${status}">${chipText||{ok:'NOMINAL',warn:'ALERTA',bad:'CRÍTICO',ref:'REF.'}[status||'ok']}</span></div>`; }
 function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;

@@ -155,6 +155,8 @@ class HybridMission:
         self.home = (0, 0)
         self._add_second_refuge()
         self.hidden_cliffs, self.hidden_obstacles = self._hide_hazards(cfg['hidden_cliffs'])
+        self.rna_marks = set()    # hazards believed only from RNA output (unconfirmed)
+        self.rna_retried = set()  # marks already discarded once; a second RNA flag makes them firm
         self.done = set()        # objectives completed: science sites visited + instruments recovered
         self.recovered = set()   # instrument caches recovered (mission goal: recuperar instrumentación)
         self.belief = self._make_belief()
@@ -312,7 +314,32 @@ class HybridMission:
                                     self.daylight, self.visibility)
 
     # ------------------------------------------------------------- planning
+    def _mark_rna(self, cell, label):
+        """Record a hazard inferred by the RNA; it stays revisable until seen twice."""
+        (self.belief.cliffs if label == 'barranco' else self.belief.obstacles).add(cell)
+        if cell not in self.rna_retried:
+            self.rna_marks.add(cell)
+
     def _plan(self, reason):
+        self._plan_once(reason)
+        if len(self.route) <= 1 and self.rna_marks:
+            # No route while relying on unconfirmed RNA beliefs: discard them once and
+            # replan. Edge sensor and RNA still re-check those cells before entering.
+            cells = sorted(self.rna_marks)
+            for cell in cells:
+                self.belief.cliffs.discard(cell)
+                self.belief.obstacles.discard(cell)
+            self.rna_retried |= self.rna_marks
+            self.rna_marks.clear()
+            self.nothing_left = False
+            entry = dict(step=self.step_index, kind='revision_rna', label='Revisión de creencias RNA',
+                         message='Sin ruta con peligros inferidos solo por la RNA: se descartan '
+                                 f'{len(cells)} marca(s) no confirmada(s) y se replanifica.', position=None)
+            self.event_log.append(entry)
+            self.pending_events.append(entry)
+            self._plan_once(reason + '+REVISION_RNA')
+
+    def _plan_once(self, reason):
         started = time.perf_counter()
         self.metrics['replans'] += 1
         self.replan_reason = None
@@ -435,6 +462,8 @@ class HybridMission:
 
     # ---------------------------------------------------------------- events
     def inject(self, kind, **data):
+        if self.finished:
+            raise ValueError('La misión ya terminó: reinicie para inyectar eventos.')
         position = data.pop('position', None)
         event = Event(kind, data)
         kind = event.kind
@@ -447,7 +476,7 @@ class HybridMission:
                 route = self.route or [self.position]
                 offset = {'barranco': 1, 'meteorito': 3, 'alienigena': 2}[kind]
                 position = route[min(offset, len(route) - 1)] if len(route) > 1 else None
-                if position is None or position in self.world.refuges:
+                if position is None or position in self.world.refuges or position == self.position:
                     neighbors = [(self.position[0] + dr, self.position[1] + dc) for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0))]
                     neighbors = [n for n in neighbors if self.world.traversable(n) and n not in self.world.refuges]
                     if not neighbors:
@@ -568,7 +597,7 @@ class HybridMission:
                     rna = dict(prediction, features=features, cell=list(cell))
                 elif prediction['label'] != 'libre' and prediction['confidence'] >= self.supervisor.confidence_threshold:
                     # Early warning two cells ahead: mark the cell and replan next step.
-                    (self.belief.cliffs if prediction['label'] == 'barranco' else self.belief.obstacles).add(cell)
+                    self._mark_rna(cell, prediction['label'])
                     self.replan_reason = 'RNA_ANTICIPA_PELIGRO'
                     self.metrics['hazards_avoided'] += 1
 
@@ -607,7 +636,7 @@ class HybridMission:
                 self.belief.cliffs.add(next_cell)
                 self.metrics['cliffs_avoided'] += 1
             elif decision.reason == 'R05_RNA_PELIGRO':
-                (self.belief.cliffs if rna['label'] == 'barranco' else self.belief.obstacles).add(next_cell)
+                self._mark_rna(next_cell, rna['label'])
                 self.metrics['hazards_avoided'] += 1
             self._plan(decision.reason)
         elif action == 'volver':

@@ -293,3 +293,69 @@ def test_instruments_are_recovered_and_reported():
     assert summary['instruments'] == 3 and summary['success']
     assert any(e['kind'] == 'instrumento' for e in mission.event_log)
     assert mission.recovered <= set(mission.path)
+
+
+# --------------------------------------------- unconfirmed RNA beliefs
+def test_probe_mission_recovers_from_false_rna_mark_blocking_the_refuge():
+    mission = HybridMission(planet='Júpiter', mode='sonda', seed=21)
+    summary = mission.run()
+    assert summary['success'], summary['outcome']
+    assert any(e['kind'] == 'revision_rna' for e in mission.event_log)
+    assert summary['safety_violations'] == 0
+
+
+def test_unconfirmed_rna_marks_are_discarded_once_then_become_firm():
+    mission = first_move_mission()
+    row, col = mission.position
+    ring = [(row + dr, col + dc) for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1))]
+    ring = [c for c in ring if mission.world.traversable(c)]
+    for cell in ring:
+        mission._mark_rna(cell, 'obstaculo')
+    mission._plan('PRUEBA')
+    assert len(mission.route) > 1
+    assert not mission.rna_marks and set(ring) <= mission.rna_retried
+    assert not set(ring) & mission.belief.obstacles
+    mission._mark_rna(ring[0], 'obstaculo')      # second independent RNA flag
+    assert ring[0] in mission.belief.obstacles and ring[0] not in mission.rna_marks
+
+
+def test_confirmed_hazards_are_never_discarded():
+    mission = first_move_mission()
+    entry = mission.inject('barranco')
+    cliff = tuple(entry['position'])
+    mission.step()                                # edge sensor confirms it
+    mission._mark_rna((5, 5), 'obstaculo')
+    mission.rna_marks.add((5, 5))
+    for cell in list(mission.rna_marks):
+        mission.belief.obstacles.discard(cell)
+    mission._plan('PRUEBA')
+    assert cliff in mission.belief.cliffs
+
+
+# ------------------------------------------------------------ event guards
+def test_hazard_event_never_defaults_onto_the_rover():
+    for seed in range(12):
+        mission = HybridMission(seed=seed).prepare()
+        mission.step(), mission.step()
+        try:
+            entry = mission.inject('alienigena')
+        except ValueError as error:
+            assert 'adyacente' in str(error)       # only when no free neighbour exists
+            continue
+        assert tuple(entry['position']) != mission.position
+        assert 'ficticio' in entry['message']
+
+
+def test_events_are_rejected_after_the_mission_ends():
+    mission = HybridMission(seed=42)
+    mission.run()
+    with pytest.raises(ValueError, match='ya terminó'):
+        mission.inject('alienigena')
+
+
+def test_alien_is_avoided_without_collision():
+    mission = HybridMission(seed=42).prepare()
+    mission.step(), mission.step()
+    alien = tuple(mission.inject('alienigena')['position'])
+    summary = mission.run()
+    assert alien not in mission.path and summary['collisions'] == 0 and summary['success']
