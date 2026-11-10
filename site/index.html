@@ -661,8 +661,8 @@ document.querySelectorAll('[data-log]').forEach(b=>b.addEventListener('click',()
   $('logPane').style.display=logMode==='log'?'':'none'; $('cmpPane').style.display=logMode==='cmp'?'':'none'; $('logTitle').textContent=logMode==='log'?'Bitácora de decisiones':'Comparación de políticas'; renderCompare(); }));
 $('fFilter').addEventListener('change',renderLog);
 function renderLog(){ if(!S) return; const f=$('fFilter').value; let rows=S.log.slice().reverse();
-  if(f==='veto') rows=rows.filter(r=>/R0[0-8]|R1[0-3]/.test(r.reason)); if(f==='ga') rows=rows.filter(r=>r.ga!==null&&r.ga!==undefined); if(f==='ev') rows=rows.filter(r=>r.events.length);
-  const cls=r=>/R0[0-6]|R10/.test(r)?'r-veto':/R0[7-9]|R1[1-3]/.test(r)?'r-warn':'r-ok';
+  if(f==='veto') rows=rows.filter(r=>/R0[0-8]|R1[0-36]/.test(r.reason)); if(f==='ga') rows=rows.filter(r=>r.ga!==null&&r.ga!==undefined); if(f==='ev') rows=rows.filter(r=>r.events.length);
+  const cls=r=>/R0[0-6]|R10/.test(r)?'r-veto':/R0[7-9]|R1[1-36]/.test(r)?'r-warn':'r-ok';
   $('trace').innerHTML=rows.length?'<table class="mt"><tr><th>paso</th><th>estado</th><th>acción</th><th>RNA</th><th>v</th><th>motivo</th></tr>'+rows.map(r=>`<tr><td>${String(r.step).padStart(3,'0')}</td><td>${r.state}</td><td>${r.action}</td><td>${r.rna?r.rna.slice(0,4)+' '+fmt(r.conf,2):'—'}</td><td>${fmt(r.speed,2)}</td><td class="${cls(r.reason)}">${r.reason}</td></tr><tr><td></td><td colspan="5" class="x">${r.events.length?'<b>⚡ '+r.events.join(', ')+'</b> · ':''}${r.ga!==null&&r.ga!==undefined?'AG fitness '+fmt(r.ga,3)+' · ':''}${r.explanation} · bat ${fmt(r.battery,1)} %</td></tr>`).join('')+'</table>'
     :'<div class="small">Sin decisiones todavía. Presione Iniciar o Paso.</div>'; }
 $('bCompare').addEventListener('click',async()=>{ running=false; syncRun(); msg('Ejecutando comparación con las mismas semillas…'); $('bCompare').disabled=true;

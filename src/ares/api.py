@@ -232,6 +232,10 @@ class Session:
             m.event_log.append(dict(step=m.step_index, kind='obstaculo_manual', label='Obstáculo manual',
                                     message='Obstáculo colocado por el operador (oculto al rover).', position=list(cell)))
         elif kind == 'limpiar':
+            if cell in m.world.cliffs:
+                m.world.elevation[cell] = m.belief.elevation[cell]  # refill the 10 m drop
+            m.risk.pop(cell, None)
+            m.rna_marks.discard(cell)
             m.world.obstacles.discard(cell)
             m.world.cliffs.discard(cell)
             m.belief.obstacles.discard(cell)

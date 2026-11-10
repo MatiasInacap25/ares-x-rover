@@ -25,6 +25,7 @@ REASONS = {
     'R13_AVANCE_DEGRADADO': 'Sensor degradado o RNA con baja confianza: avance conservador fusionado con sensor determinista.',
     'R14_AVANCE': 'Ruta segura y sensores válidos: se avanza.',
     'R15_MISION_COMPLETA': 'Objetivos alcanzables completados y retorno seguro.',
+    'R16_ESPERA_VIENTO': 'Ráfaga de viento en modo sonda: se mantiene la posición y se corrige la deriva.',
 }
 PRIORITY = list(REASONS)
 
@@ -100,6 +101,8 @@ class SafetySupervisor:
             permits.append(f"RNA: libre p={rna['probabilities']['libre']:.2f}")
         if ctx.get('quake_wait', 0) > 0:
             return Decision('detener', 'R08_ESPERA_SISMO', 'ALERTA', 0., vetoes, permits)
+        if ctx.get('wind_wait', 0) > 0:
+            return Decision('detener', 'R16_ESPERA_VIENTO', 'ALERTA', 0., vetoes, permits)
         if ctx.get('at_refuge') and battery < ctx.get('recharge_target', 0):
             return Decision('recargar', 'R09_RECARGA', 'REFUGIO', 0., vetoes, permits)
         if not ctx.get('at_refuge') and not ctx.get('returning') and energy_to_refuge * self.return_margin >= battery:

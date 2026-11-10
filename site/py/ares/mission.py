@@ -33,6 +33,7 @@ POLICIES = {
     'ag_puro': dict(rna=False, fuzzy=False, ga=True, fixed_risk=True, label='AG puro con riesgos fijos'),
 }
 FIXED_SPEED = .5          # speed used when the fuzzy controller is disabled
+PLAN_SPEED = .85          # speed assumed when budgeting energy (typical cruise; avoids optimistic plans)
 RISK_PRIOR = .1           # belief risk of a never-observed cell (supuesto)
 FIXED_RISK = .15          # constant estimated risk for the 'ag_puro' baseline
 DAY_LENGTH = 30           # steps per half day/night cycle (supuesto)
@@ -171,6 +172,7 @@ class HybridMission:
         self.health = 100.
         self.daylight, self.visibility = True, 1.
         self.wait_steps = 0
+        self.wind_wait = 0
         self.elapsed = 0.
         self.step_index = 0
         self.state = 'CONFIGURACION'
@@ -279,7 +281,7 @@ class HybridMission:
         if self.position in self.world.refuges:
             return 0.
         route = self.refuge_route()
-        return math.inf if route is None else (len(route) - 1) * self.cell_cost()
+        return math.inf if route is None else (len(route) - 1) * self.cell_cost(PLAN_SPEED)
 
     def _risk_avoid(self):
         return {cell for cell, value in self.risk.items() if value >= .5}
@@ -338,6 +340,13 @@ class HybridMission:
             self.event_log.append(entry)
             self.pending_events.append(entry)
             self._plan_once(reason + '+REVISION_RNA')
+        if len(self.route) <= 1 and not self.returning and self.position not in self.world.refuges:
+            # No feasible exploration plan (typically low energy): head for the nearest
+            # reachable refuge instead of waiting without a route.
+            back = self.refuge_route()
+            if back and len(back) > 1:
+                self.returning = True
+                self._plan_once(reason + '+RETORNO')
 
     def _plan_once(self, reason):
         started = time.perf_counter()
@@ -376,7 +385,7 @@ class HybridMission:
         goal = self.home
         risk = self.risk_map()
         kwargs = dict(temperature=self.temperature_internal, thermal_limit=self.config['thermal_limit'],
-                      energy_per_step=self.cell_cost())
+                      energy_per_step=self.cell_cost(PLAN_SPEED))
         result = planner.plan(self.belief, self.position, goal, battery=self.battery, estimated_risk=risk, **kwargs)
         accepted, rejected = self.supervisor.filter_routes(result['candidates'], self.belief.cliffs, self.belief.obstacles)
         chosen = accepted[0] if accepted else None
@@ -415,7 +424,7 @@ class HybridMission:
         avoid = self._risk_avoid() if self.policy['rna'] else set()
         remaining = sorted(self.belief.science_sites - self.done)
         position, route, order = self.position, [self.position], []
-        cost = self.cell_cost()
+        cost = self.cell_cost(PLAN_SPEED)
         while remaining:
             options = [(self._bfs(position, site, avoid), site) for site in remaining]
             options = [(p, s) for p, s in options if p]
@@ -497,7 +506,10 @@ class HybridMission:
             result = {'kind': kind, 'message': 'Falla simulada de sensor ' + ', '.join(pretty.get(n, n) for n in names)
                       + ' (NaN) durante 8 pasos: degradación segura.'}
         else:
+            quake_wait = self.wait_steps
             result = event.apply(self)
+            if kind == 'viento':
+                self.wait_steps = quake_wait  # wind is not a quake: it has its own hold
         if kind == 'barranco':
             self.world.elevation[position] += 10.  # Event lowers 20 m; keep a 10 m drop
         elif kind == 'meteorito':
@@ -522,6 +534,7 @@ class HybridMission:
         elif kind == 'biosenal_anomala':
             self.metrics['anomalies'] += 1
         elif kind == 'viento' and self.profile.mode == 'probe':
+            self.wind_wait = 1
             self.replan_reason = 'VIENTO'
         entry = dict(step=self.step_index, kind=kind, label=EVENT_LABELS.get(kind, kind),
                      message=result.get('message', kind), position=list(position) if position else None)
@@ -542,6 +555,7 @@ class HybridMission:
         for key in ('link', 'vibration'):
             if self.timers[key]:
                 self.timers[key] -= 1
+        self.sensors.link_available = self.timers['link'] == 0
         for name in list(self.sensor_timers):
             self.sensor_timers[name] -= 1
             if self.sensor_timers[name] <= 0:
@@ -623,7 +637,7 @@ class HybridMission:
                    rna=rna, rna_used=self.policy['rna'], fuzzy_speed=speed if self.policy['fuzzy'] else None,
                    has_route=next_cell is not None,
                    needs_replan=self.replan_reason is not None and self.replan_reason != 'RECARGA_COMPLETA',
-                   quake_wait=self.wait_steps, at_refuge=at_refuge, energy_to_refuge=self.energy_to_refuge(),
+                   quake_wait=self.wait_steps, wind_wait=self.wind_wait, at_refuge=at_refuge, energy_to_refuge=self.energy_to_refuge(),
                    recharge_target=90. if self.returning else 0., returning=self.returning,
                    mission_complete=complete)
         decision = self.supervisor.decide(ctx)
@@ -698,6 +712,8 @@ class HybridMission:
         self.metrics['energy_used'] += cost_total
         if self.wait_steps and decision.reason == 'R08_ESPERA_SISMO':
             self.wait_steps -= 1
+        if self.wind_wait and decision.reason == 'R16_ESPERA_VIENTO':
+            self.wind_wait -= 1
         self.no_route_steps = self.no_route_steps + 1 if decision.reason == 'R10_SIN_RUTA' else 0
 
         # 7. update mission state
@@ -707,7 +723,8 @@ class HybridMission:
             self.outcome = 'Rover perdido: ' + ('caída en barranco' if collision == 'caida_barranco' else 'recursos agotados')
         elif decision.reason == 'R15_MISION_COMPLETA':
             self.finished, self.outcome = True, 'Misión cumplida: objetivos alcanzables y retorno seguro'
-        elif decision.reason in ('R06_REFUGIO_INALCANZABLE', 'R01_LIMITE_TERMICO', 'R00_RECURSOS_AGOTADOS'):
+        elif decision.reason in ('R06_REFUGIO_INALCANZABLE', 'R01_LIMITE_TERMICO', 'R00_RECURSOS_AGOTADOS',
+                                 'R03_DANO_CRITICO'):
             self.finished, self.outcome = True, decision.explanation
             self.state = 'FRACASO' if decision.reason == 'R00_RECURSOS_AGOTADOS' else 'MODO_SEGURO'
         elif self.no_route_steps >= 10:

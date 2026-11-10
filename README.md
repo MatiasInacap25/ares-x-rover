@@ -23,7 +23,7 @@ archivos locales.
 python -m venv .venv
 .venv/bin/pip install numpy pandas scikit-learn matplotlib pytest
 .venv/bin/python server.py          # http://127.0.0.1:8765
-.venv/bin/python -m pytest -q       # 123 pruebas
+.venv/bin/python -m pytest -q       # 131 pruebas
 .venv/bin/python build_notebook.py  # regenera ARES_X_Rover.ipynb desde src/ y web/
 ```
 
@@ -60,7 +60,7 @@ replanificar_ag_si_corresponde → aplicar_restricciones → ejecutar_accion →
   centroide. Fija la velocidad, que se traduce en 0, 1 o 2 celdas por paso y en el consumo de energía.
 - **AG**: 3 puntos de paso con reparación, población 30, 30 generaciones, torneo, cruce, mutación, elitismo y parada
   temprana. Familias integradas: laberinto (factibilidad) y viajero (orden de visita científica).
-- **Supervisor**: prioridades deterministas R00–R15. Primero las prohibiciones físicas y luego las propuestas de IA.
+- **Supervisor**: prioridades deterministas R00–R16. Primero las prohibiciones físicas y luego las propuestas de IA.
   Veta las rutas que cruzan un barranco confirmado.
 - **No omnisciencia**: el rover planifica sobre un mapa creído; barrancos y ~30 % de obstáculos están ocultos.
 
