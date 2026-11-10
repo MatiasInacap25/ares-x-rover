@@ -520,7 +520,7 @@ async function init(){
   await call('state',{},true);
   $('fPlanet').value=S.config.planet; $('fMode').value=S.config.mode==='rover'?'rover':'sonda'; $('fSeed').value=S.config.seed; $('fDiff').value=S.config.difficulty; $('fBattery').value=S.config.battery; $('lBat').textContent=S.config.battery; $('fPolicy').value=S.config.policy;
 }
-init();
+if (window.ARES_BOOT) window.ARES_BOOT.then(init).catch(e=>msg('No se pudo iniciar el motor Python: '+e,true)); else init();
 </script>
 </body>
 </html>

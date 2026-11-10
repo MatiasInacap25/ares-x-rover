@@ -101,8 +101,9 @@ class FuzzyController:
                                   for x in self.universe])
                 aggregate = np.maximum(aggregate, np.minimum(strength, curve))
                 result['activated_rules'].append({**rule, 'strength': strength})
-        area = np.trapezoid(aggregate, self.universe)
-        centroid = float(np.trapezoid(self.universe * aggregate, self.universe) / area) if area > 0 else 0.0
+        integrate = getattr(np, 'trapezoid', None) or np.trapz  # numpy < 2 compatibility
+        area = integrate(aggregate, self.universe)
+        centroid = float(integrate(self.universe * aggregate, self.universe) / area) if area > 0 else 0.0
         result.update(speed=centroid, centroid=centroid, caution=1.0 - centroid,
                       aggregated_curve=aggregate.tolist(),
                       reason='INFERENCIA_MAMDANI' if area > 0 else 'SIN_REGLAS_ACTIVAS')
