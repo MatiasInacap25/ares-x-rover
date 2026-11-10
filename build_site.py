@@ -49,9 +49,7 @@ def main():
         shutil.copy(ROOT / 'src' / 'ares' / f'{name}.py', SITE / 'py' / 'ares' / f'{name}.py')
         names.append(f'{name}.py')
     (SITE / 'py' / 'manifest.json').write_text(json.dumps(names), encoding='utf-8')
-    (SITE / 'vercel.json').write_text(json.dumps({'cleanUrls': True, 'headers': [
-        {'source': '/py/(.*)', 'headers': [{'key': 'Cache-Control', 'value': 'public, max-age=300'}]}]}, indent=2),
-        encoding='utf-8')
+    # Deployment config lives in the repository root vercel.json (outputDirectory: site).
     print('site/ generado:', len(names), 'módulos Python')
 
 
