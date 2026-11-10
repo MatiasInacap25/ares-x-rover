@@ -252,3 +252,44 @@ def test_biosignal_never_claims_life():
     mission = first_move_mission()
     entry = mission.inject('biosenal_anomala')
     assert 'no confirma vida' in entry['message']
+
+
+# ------------------------------------------------- RF-11, RF-03, instruments
+def test_initial_route_visible_before_first_step_and_after_reset():
+    session = Session(seed=42)
+    assert len(session.dispatch('state')['map']['route']) > 1
+    session.dispatch('step', {'n': 6})
+    snapshot = session.dispatch('reset')
+    assert snapshot['status']['step'] == 0 and len(snapshot['map']['route']) > 1
+
+
+def test_prepare_does_not_change_the_trace():
+    plain, prepared = HybridMission(seed=9), HybridMission(seed=9).prepare()
+    plain.run(), prepared.run()
+    strip = lambda trace: [{k: v for k, v in row.items() if k != 'ga'} for row in trace]
+    assert json.dumps(strip(plain.logger.trace), sort_keys=True) == json.dumps(strip(prepared.logger.trace), sort_keys=True)
+
+
+def test_rf11_training_history_has_loss_and_accuracy_per_iteration():
+    history = Session().dispatch('meta')['training']
+    assert len(history) >= 10 and history[0]['iteration'] == 1
+    assert history[-1]['loss'] < history[0]['loss']
+    assert history[-1]['validation_accuracy'] > history[0]['validation_accuracy'] - 1e-9
+    assert all(0 <= row['train_accuracy'] <= 1 for row in history)
+
+
+def test_rf03_step_duration_scales_time_and_energy():
+    short, long = HybridMission(seed=42, step_duration=1.), HybridMission(seed=42, step_duration=2.)
+    a, b = short.step(), long.step()
+    assert b['t'] == 2 * a['t']
+    assert (100 - b['battery']) > (100 - a['battery'])
+    assert 'error' in Session().dispatch('configure', {'step_duration': 0})
+
+
+def test_instruments_are_recovered_and_reported():
+    mission = HybridMission(seed=42)
+    summary = mission.run()
+    assert summary['instruments_total'] == 3
+    assert summary['instruments'] == 3 and summary['success']
+    assert any(e['kind'] == 'instrumento' for e in mission.event_log)
+    assert mission.recovered <= set(mission.path)

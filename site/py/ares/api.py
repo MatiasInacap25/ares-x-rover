@@ -74,7 +74,7 @@ def ga_view(ga):
 class Session:
     def __init__(self, **config):
         self.config = validate_config(config)
-        self.mission = HybridMission(**self.config)
+        self.mission = HybridMission(**self.config).prepare()
         self.comparison = None
 
     # ---------------------------------------------------------------- views
@@ -106,6 +106,7 @@ class Session:
                         position=list(m.position), battery=_r(m.battery, 2), health=_r(m.health, 2),
                         daylight=m.daylight, visibility=m.visibility, returning=m.returning,
                         science=_r(world.science_progress, 3), link=m.timers['link'] == 0,
+                        instruments=len(m.recovered), instruments_total=len(world.resources),
                         storm=m.timers['storm'], quake=m.wait_steps,
                         sensor_failures=sorted(m.sensors.failures),
                         temperature_internal=_r(m.temperature_internal, 1)),
@@ -114,7 +115,8 @@ class Session:
                      obstacles=_cells(belief.obstacles), hidden_obstacles=_cells(hidden_obstacles),
                      cliffs=_cells(belief.cliffs), hidden_cliffs=_cells(hidden_cliffs),
                      science=[[int(r), int(c), (r, c) in world.visited_science] for r, c in sorted(world.science_sites)],
-                     refuges=_cells(world.refuges), resources=_cells(world.resources),
+                     refuges=_cells(world.refuges),
+                     resources=[[int(r), int(c), (r, c) in m.recovered] for r, c in sorted(world.resources)],
                      risk=[[int(r), int(c), _r(v, 2)] for (r, c), v in sorted(m.risk.items()) if v >= .15],
                      path=[list(p) for p in m.path], route=[list(p) for p in (m.route or [])],
                      candidates=[c['route'] for c in ga.get('candidates', [])][:3],
@@ -158,7 +160,8 @@ class Session:
                        classes=list(model.classes_),
                        coefs=[[[_r(v, 3) for v in row] for row in layer.tolist()] for layer in model.coefs_],
                        intercepts=[[_r(v, 3) for v in layer.tolist()] for layer in model.intercepts_])
-        return clean(dict(version=VERSION, network=network, planets=[dict(key=k, name=v[0], rocky=v[1]) for k, v in PROFILES.items()],
+        training = [{k: _r(v, 4) for k, v in row.items()} for row in shared_perception(0).report_['history']]
+        return clean(dict(version=VERSION, network=network, training=training, planets=[dict(key=k, name=v[0], rocky=v[1]) for k, v in PROFILES.items()],
                           policies={k: v['label'] for k, v in POLICIES.items()}, events=EVENT_LABELS,
                           scenarios={k: v['label'] for k, v in SCENARIOS.items()}, reasons=REASONS,
                           features=list(FEATURES), fuzzy_sets=fuzzy_sets(), operational_label=ASSUMPTION))
@@ -187,7 +190,7 @@ class Session:
         merged.update(config)
         config = validate_config(merged)  # raises readable ValueError (CA-07, NaN sliders)
         self.config = config
-        self.mission = HybridMission(**config)
+        self.mission = HybridMission(**config).prepare()
         return self.snapshot()
 
     def cmd_validate(self, **config):
@@ -197,7 +200,7 @@ class Session:
         return {'ok': True}
 
     def cmd_reset(self):
-        self.mission = HybridMission(**self.config)
+        self.mission = HybridMission(**self.config).prepare()
         return self.snapshot()
 
     def cmd_step(self, n=1):

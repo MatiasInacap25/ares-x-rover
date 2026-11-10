@@ -23,7 +23,7 @@ archivos locales.
 python -m venv .venv
 .venv/bin/pip install numpy pandas scikit-learn matplotlib pytest
 .venv/bin/python server.py          # http://127.0.0.1:8765
-.venv/bin/python -m pytest -q       # 112 pruebas
+.venv/bin/python -m pytest -q       # 117 pruebas
 .venv/bin/python build_notebook.py  # regenera ARES_X_Rover.ipynb desde src/ y web/
 ```
 
@@ -56,7 +56,7 @@ replanificar_ag_si_corresponde → aplicar_restricciones → ejecutar_accion →
 
 - **RNA**: MLP (32,16) ReLU con softmax (libre/obstáculo/barranco) en scikit-learn. Datos sintéticos etiquetados por el
   simulador y particionados **por mapa**. Mira dos celdas adelante y alimenta el mapa de riesgo del AG y el veto del supervisor.
-- **Difuso**: 4 variables con 3 conjuntos cada una (triangulares y trapezoidales), 10 reglas Mamdani min–max y
+- **Difuso**: 4 variables con 3 conjuntos cada una (triangulares y trapezoidales), 12 reglas Mamdani min–max y
   centroide. Fija la velocidad, que se traduce en 0, 1 o 2 celdas por paso y en el consumo de energía.
 - **AG**: 3 puntos de paso con reparación, población 30, 30 generaciones, torneo, cruce, mutación, elitismo y parada
   temprana. Familias integradas: laberinto (factibilidad) y viajero (orden de visita científica).
@@ -81,6 +81,8 @@ replanificar_ag_si_corresponde → aplicar_restricciones → ejecutar_accion →
 | Ciclo día/noche | 30 pasos; noche → visibilidad 0,6 |
 | Tormenta / falla de sensor / pérdida de enlace | 15 / 8 / 10 pasos |
 | Colisión | −25 % de integridad; caída en barranco = pérdida del rover |
+| Instrumentación | 3 cajas por mapa; son objetivos del planificador junto con los sitios científicos; cada una recuperada suma +5 % de batería |
+| Duración de paso | 0,5–3 s configurable; escala el tiempo transcurrido y la energía por celda |
 | Umbral RNA | confianza ≥ 0,65 para vetar; riesgo = 0,7·p(obstáculo) + p(barranco) |
 | Margen de retorno | se vuelve al refugio cuando energía de retorno × 1,25 ≥ batería |
 | Corrosión en Venus | −0,4 % de integridad por paso |

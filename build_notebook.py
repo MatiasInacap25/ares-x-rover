@@ -77,7 +77,7 @@ sample = dict(distance=.05, slope=30, elevation_delta=-10, texture=.3, visibilit
 pred = perception.predict(sample)
 print('Lectura con caída de 10 m →', pred['label'], {k: round(v, 3) for k, v in pred['probabilities'].items()})"""),
     md("""## 3. Lógica difusa — control (RF-05, RF-06, CA-05)
-Distancia (cerca/media/lejos), batería (crítica/baja/alta), pendiente (plana/media/fuerte) y temperatura; 10 reglas Mamdani min–max,
+Distancia (cerca/media/lejos), batería (crítica/baja/alta), pendiente (plana/media/fuerte) y temperatura; 12 reglas Mamdani min–max,
 desfusificación por centroide. Sin reglas activas → salida documentada 0 (parar)."""),
     code("""fz = FuzzyController()
 for rule in fz.rules:

@@ -37,6 +37,7 @@ RISK_PRIOR = .1           # belief risk of a never-observed cell (supuesto)
 FIXED_RISK = .15          # constant estimated risk for the 'ag_puro' baseline
 DAY_LENGTH = 30           # steps per half day/night cycle (supuesto)
 MAX_STEPS = 400
+INSTRUMENT_BATTERY = 5.   # battery recovered with each instrument cache (supuesto)
 EVENT_LABELS = {
     'barranco': 'Barranco', 'bateria_baja': 'Batería baja', 'dia': 'Día', 'noche': 'Noche',
     'sismo': 'Sismo', 'meteorito': 'Meteorito', 'tormenta_polvo': 'Tormenta de polvo',
@@ -154,6 +155,8 @@ class HybridMission:
         self.home = (0, 0)
         self._add_second_refuge()
         self.hidden_cliffs, self.hidden_obstacles = self._hide_hazards(cfg['hidden_cliffs'])
+        self.done = set()        # objectives completed: science sites visited + instruments recovered
+        self.recovered = set()   # instrument caches recovered (mission goal: recuperar instrumentación)
         self.belief = self._make_belief()
         self.sensors = SensorSuite(self.seed, noise=.05)
         self.perception = shared_perception(0)
@@ -200,13 +203,13 @@ class HybridMission:
 
     def _add_second_refuge(self):
         far = [cell for cell in self._free_cells() if cell[0] + cell[1] >= 18
-               and cell not in self.world.science_sites]
+               and cell not in self.world.science_sites and cell not in self.world.resources]
         if far:
             self.world.refuges.add(far[int(self.rng.integers(len(far)))])
 
     def _hide_hazards(self, count):
         world = self.world
-        reserved = world.refuges | world.science_sites | {self.home, (0, 1), (1, 0), (1, 1)}
+        reserved = world.refuges | world.science_sites | world.resources | {self.home, (0, 1), (1, 0), (1, 1)}
         candidates = [cell for cell in self._free_cells() if cell not in reserved]
         cliffs = set()
         if self.profile.mode == 'rover' and candidates:
@@ -229,8 +232,9 @@ class HybridMission:
             belief.elevation[cell] += 10.  # orbital map does not resolve the drop
         belief.obstacles = set(world.obstacles) - self.hidden_obstacles
         belief.cliffs = set()
-        belief.science_sites = world.science_sites
-        belief.visited_science = world.visited_science
+        # Planner objectives = science sites + instrument caches to recover.
+        belief.science_sites = world.science_sites | world.resources
+        belief.visited_science = self.done
         belief.resources = world.resources
         belief.refuges = world.refuges
         return belief
@@ -321,7 +325,7 @@ class HybridMission:
             self._plan_ga(reason)
         else:
             self._plan_greedy(reason)
-        self.ga['step'] = self.step_index
+        self.ga['step'] = max(1, self.step_index)
         self.planned_history.append(list(self.route))
         self.metrics['planning_seconds'] += time.perf_counter() - started
 
@@ -382,7 +386,7 @@ class HybridMission:
     def _plan_greedy(self, reason):
         """Nearest-neighbour tour over remaining sites with a battery check (no GA)."""
         avoid = self._risk_avoid() if self.policy['rna'] else set()
-        remaining = sorted(self.world.science_sites - self.world.visited_science)
+        remaining = sorted(self.belief.science_sites - self.done)
         position, route, order = self.position, [self.position], []
         cost = self.cell_cost()
         while remaining:
@@ -531,7 +535,7 @@ class HybridMission:
         if depleted:
             self.battery = 0.
         complete = self.position in self.world.refuges and self.step_index > 1 and not self.returning and (
-            self.world.science_progress == 1 or self.nothing_left)
+            not (self.belief.science_sites - self.done) or self.nothing_left)
         if not complete:
             if self.route is None or (self.replan_reason and self.replan_reason not in ('RECARGA_COMPLETA',)):
                 self._plan(self.replan_reason or 'INICIO')
@@ -647,7 +651,17 @@ class HybridMission:
                 self.metrics['distance'] += 1
                 if cell in self.world.science_sites and cell not in self.world.visited_science:
                     self.world.visited_science.add(cell)
+                    self.done.add(cell)
                     self.metrics['science_samples'] += 1
+                if cell in self.world.resources and cell not in self.recovered:
+                    self.recovered.add(cell)
+                    self.done.add(cell)
+                    self.battery = min(100., self.battery + INSTRUMENT_BATTERY)
+                    entry = dict(step=self.step_index, kind='instrumento', label='Instrumento recuperado',
+                                 message=f'Instrumentación recuperada en {list(cell)}: +{INSTRUMENT_BATTERY:.0f} % de batería (celda de energía).',
+                                 position=list(cell))
+                    self.event_log.append(entry)
+                    self.pending_events.append(entry)
         if action not in ('avanzar', 'recargar'):
             idle = .05 * self.config['step_duration']
             self.battery = max(0., self.battery - idle)
@@ -710,6 +724,12 @@ class HybridMission:
                          nav_valid=nav_valid, speed=speed)
         return record
 
+    def prepare(self):
+        """Compute the initial plan before the first step so the UI can show it."""
+        if self.route is None and self.step_index == 0:
+            self._plan(self.replan_reason or 'INICIO')
+        return self
+
     def run(self, max_steps=MAX_STEPS):
         while not self.finished and self.step_index < max_steps:
             self.step()
@@ -724,6 +744,7 @@ class HybridMission:
                     hazards_avoided=m['hazards_avoided'], battery_left=round(self.battery, 3),
                     energy_used=round(m['energy_used'], 3), distance=m['distance'],
                     science=round(self.world.science_progress, 3), samples=m['science_samples'],
+                    instruments=len(self.recovered), instruments_total=len(self.world.resources),
                     replans=m['replans'], ga_runs=m['ga_runs'], safety_violations=m['safety_violations'],
                     decision_ms=round(1000 * m['decision_seconds'] / max(1, self.step_index), 3),
                     planning_s=round(m['planning_seconds'], 3), health=round(self.health, 2))

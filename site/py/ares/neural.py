@@ -169,6 +169,20 @@ class NeuralPerception:
                 'barranco_recall': float(recall_score(expected, predicted, labels=['barranco'], average='macro', zero_division=0)),
                 'calibration_error': _calibration_error(expected, probabilities, predicted),
             }
+        # RF-11: per-iteration replay of the same training (same seed and data) to
+        # expose loss and accuracy curves; partial_fit runs one epoch per call.
+        probe = MLPClassifier(hidden_layer_sizes=(32, 16), activation='relu', early_stopping=False,
+                              random_state=self.seed, learning_rate_init=.003)
+        train_x, train_y = scaler.transform(rows[indices['train']]), truth[indices['train']]
+        valid_x, valid_y = scaler.transform(rows[indices['validation']]), truth[indices['validation']]
+        history = []
+        for iteration in range(1, int(model.n_iter_) + 1):
+            probe.partial_fit(train_x, train_y, classes=model.classes_)
+            history.append({'iteration': iteration, 'loss': float(probe.loss_),
+                            'train_accuracy': float(accuracy_score(train_y, probe.predict(train_x))),
+                            'validation_accuracy': float(accuracy_score(valid_y, probe.predict(valid_x)))})
+        report['history'] = history
+        report['loss_curve'] = [float(v) for v in model.loss_curve_]
         self.model, self.scaler = model, scaler
         self.split_indices_, self.report_ = indices, report
         return report

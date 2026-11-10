@@ -139,6 +139,7 @@ canvas.fill{display:block;width:100%}
       <div><div class="small">Dificultad</div><select id="fDiff"><option value="low">Baja</option><option value="medium" selected>Media</option><option value="high">Alta</option></select></div>
     </div>
     <div class="sl" style="margin-top:4px">Batería inicial<span id="lBat">100 %</span><input id="fBattery" type="range" min="0" max="100" step="1" value="100"></div>
+    <div class="sl">Duración de paso (tiempo y energía por ciclo)<span id="lDur">1.0 s</span><input id="fDur" type="range" min="0.5" max="3" step="0.5" value="1"></div>
     <button class="btn c" id="bApply" style="width:100%;margin-top:4px">Aplicar configuración</button>
     <div class="lbl">Simulación</div>
     <div class="g3"><button class="btn go" id="bRun">▶ Iniciar</button><button class="btn c" id="bStep">Paso</button><button class="btn c" id="bReset">Reiniciar</button></div>
@@ -169,6 +170,10 @@ canvas.fill{display:block;width:100%}
     <div class="lbl">Evaluación en test (mapas no vistos)</div>
     <div class="small mono" id="nnMetrics"></div>
     <canvas id="nnConf" class="fill" style="height:74px;margin-top:4px"></canvas>
+    <div class="lbl">Entrenamiento · pérdida y exactitud por iteración</div>
+    <canvas id="nnCurve" class="fill" style="height:92px"></canvas>
+    <input type="range" id="fIter" min="1" max="1" value="1">
+    <div class="small mono" id="nnIter"></div>
    </div>
   </section>
 
@@ -401,7 +406,12 @@ function buildDynamic(){
     const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.32,0),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.6,roughness:.3})); gem.position.set(x,y+.9,z); gem.userData.spin=true;
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,6,6),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.35})); beam.position.set(x,y+3,z);
     V.dyn.add(gem,beam); });
-  M.resources.forEach(([r,c])=>{ const [x,z]=cellXZ(r,c,M); const k=new THREE.Mesh(new THREE.ConeGeometry(.16,.5,5),new THREE.MeshStandardMaterial({color:0x9fd7ff,emissive:0x2a6a9a,emissiveIntensity:.5})); k.position.set(x+.4,heightAt(x+.4,z)+.25,z); V.dyn.add(k); });
+  // instrument caches to recover (mission goal)
+  M.resources.forEach(([r,c,done])=>{ if(done) return; const [x,z]=cellXZ(r,c,M), y=heightAt(x,z);
+    const crate=new THREE.Mesh(new THREE.BoxGeometry(.6,.42,.6),new THREE.MeshStandardMaterial({color:0x9aa4b0,roughness:.5,metalness:.6})); crate.position.set(x,y+.25,z); crate.rotation.y=.5; crate.castShadow=true;
+    const lamp=new THREE.Mesh(new THREE.SphereGeometry(.1,10,8),new THREE.MeshBasicMaterial({color:0x5aa9ff})); lamp.position.set(x,y+.6,z);
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,4,6),new THREE.MeshBasicMaterial({color:0x5aa9ff,transparent:true,opacity:.35})); beam.position.set(x,y+2.4,z);
+    V.dyn.add(crate,lamp,beam); });
   // routes
   (M.candidates||[]).forEach((route,i)=>{ if(i===M.chosen) return; const l=pathLine(route,0xb58cff,.05,true,.3); if(l) V.dyn.add(l); });
   const planned=pathLine(M.route,0xffd84a,.08,false,.42); if(planned) V.dyn.add(planned);
@@ -506,10 +516,12 @@ function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
     tl('Visibilidad','0–1 · partículas',fmt(st.visibility,2),st.visibility<.4?'bad':st.visibility<.8?'warn':'ok'),
     tl('Potencia solar','W simulados',fmt(T.solar_power,1),T.solar_power<1?'warn':'ok'),
     tl('Enlace','latencia / autonomía',st.link?'OK':'Perdido',st.link?'ok':'warn',st.link?null:'AUTÓNOMO'),
-    tl('Ciencia','% sitios visitados',Math.round(st.science*100)+' %','ok','PROGRESO')].join(''); }
+    tl('Ciencia','% sitios visitados',Math.round(st.science*100)+' %','ok','PROGRESO'),
+    tl('Instrumentación','cajas recuperadas',`${st.instruments}/${st.instruments_total}`,st.instruments>=st.instruments_total?'ok':'ref',st.instruments>=st.instruments_total?'COMPLETO':'PENDIENTE')].join(''); }
 function renderTop(){ const st=S.status;
+  if(document.activeElement!==$('fDur')){ $('fDur').value=S.config.step_duration; $('lDur').textContent=(+S.config.step_duration).toFixed(1)+' s'; }
   $('oPlanet').textContent=`${S.planet.name.toUpperCase()} · SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')}`;
-  $('oStep').textContent=`paso ${st.step}`; $('oPolicy').textContent=S.policy_label; $('cSeed').textContent=`semilla ${S.config.seed}`;
+  $('oStep').textContent=`paso ${st.step} · t=${fmt(st.t,1)} s`; $('oPolicy').textContent=S.policy_label; $('cSeed').textContent=`semilla ${S.config.seed}`;
   const label={CONFIGURACION:'EN ESPERA'}[st.state]||st.state.replace('_',' ');
   $('sState').textContent=label+(st.finished?' · FIN':''); $('sState').className='st st-'+st.state;
   const D=S.decision; $('sExpl').textContent=st.finished?st.outcome:(D?`${D.reason}: ${D.explanation}`:'Configure la misión y presione Iniciar.');
@@ -546,7 +558,18 @@ function renderNN(){ if(!META||!S) return; const src=nnMode==='test'?nnTest:S.rn
   $('nnDecision').innerHTML=src?`→ <b>${src.label}</b> (confianza ${fmt(src.confidence,2)})${src.low_confidence?' · <span class="r-warn">baja confianza: fusión con sensor determinista</span>':''}${src.confidence>=.65&&src.label!=='libre'?' · <span class="r-veto">veto del supervisor (p ≥ 0,65)</span>':''}`:(S.rna_error?`<span class="r-veto">${S.rna_error}</span>`:'');
   const cm=t.confusion_matrix, labs=t.labels, [g2,w2,h2]=ctx2d($('nnConf')); const cw=(w2-70)/3, ch=(h2-14)/3; let mxv=Math.max(...cm.flat());
   g2.font='9.5px JetBrains Mono, monospace'; labs.forEach((l,i)=>{ g2.fillStyle=css('--dim'); g2.textAlign='right'; g2.fillText(l,64,14+i*ch+ch/2); g2.textAlign='center'; g2.fillText(l,70+i*cw+cw/2,10);
-    labs.forEach((_,j)=>{ const v=cm[i][j]; g2.fillStyle=i===j?`rgba(82,213,142,${.15+v/mxv*.6})`:v?`rgba(255,90,79,${.2+v/mxv*.6})`:'#17110c'; g2.fillRect(70+j*cw+1,14+i*ch+1,cw-2,ch-2); g2.fillStyle=css('--text'); g2.fillText(v,70+j*cw+cw/2,14+i*ch+ch/2+3); }); }); g2.textAlign='left'; }
+    labs.forEach((_,j)=>{ const v=cm[i][j]; g2.fillStyle=i===j?`rgba(82,213,142,${.15+v/mxv*.6})`:v?`rgba(255,90,79,${.2+v/mxv*.6})`:'#17110c'; g2.fillRect(70+j*cw+1,14+i*ch+1,cw-2,ch-2); g2.fillStyle=css('--text'); g2.fillText(v,70+j*cw+cw/2,14+i*ch+ch/2+3); }); }); g2.textAlign='left'; renderCurve(); }
+
+function renderCurve(){ const H=META&&META.training; if(!H||!H.length) return; const sl=$('fIter');
+  if(+sl.max!==H.length){ sl.max=H.length; sl.value=H.length; }
+  const k=Math.max(1,Math.min(H.length,+sl.value)), row=H[k-1], [g,w,h]=ctx2d($('nnCurve')); const mx=Math.max(...H.map(r=>r.loss));
+  const X=i=>26+(w-32)*i/Math.max(1,H.length-1), Y=v=>6+(h-18)*(1-v);
+  g.strokeStyle='#2b2119'; g.font='9px JetBrains Mono'; [0,.5,1].forEach(t=>{ g.beginPath(); g.moveTo(26,Y(t)); g.lineTo(w-6,Y(t)); g.stroke(); g.fillStyle=css('--dim'); g.fillText(t.toFixed(1),2,Y(t)+3); });
+  [[css('--bad'),r=>r.loss/mx],[css('--amber'),r=>r.train_accuracy],[css('--ok'),r=>r.validation_accuracy]].forEach(([col,f])=>{ g.strokeStyle=col; g.lineWidth=1.5; g.beginPath(); H.forEach((r,i)=>{ i?g.lineTo(X(i),Y(f(r))):g.moveTo(X(i),Y(f(r))); }); g.stroke(); });
+  g.strokeStyle='#fff'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(X(k-1),4); g.lineTo(X(k-1),h-12); g.stroke(); g.setLineDash([]);
+  g.fillStyle=css('--bad'); g.fillText('pérdida (norm.)',28,h-1); g.fillStyle=css('--amber'); g.fillText('acc entren.',124,h-1); g.fillStyle=css('--ok'); g.fillText('acc valid.',196,h-1);
+  $('nnIter').textContent=`iteración ${row.iteration}/${H.length} · pérdida ${fmt(row.loss,4)} · acc entren. ${fmt(row.train_accuracy,3)} · acc valid. ${fmt(row.validation_accuracy,3)}`; }
+$('fIter').addEventListener('input',renderCurve);
 
 // ------------------------------------------------------------ E · fuzzy
 const FZV=[['distance','Distancia a riesgo','m'],['battery','Batería','%'],['slope','Pendiente','°'],['temperature','Temp. componentes','°C']];
@@ -615,6 +638,7 @@ async function renderGA(force){ if(!S) return; if(!gaParamsBuilt) buildGaParams(
   if(gaRunSel===null){ (M.candidates||[]).forEach((rt,i)=>{ if(i!==M.chosen) P(rt,'rgba(181,140,255,.6)',1); }); P(M.route,'#ffd84a',2); }
   else cands.forEach(cnd=>{ P(cnd.science_order&&cnd.chromosome?null:null); });
   M.science.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#ffd84a'; g.beginPath(); g.arc(ox+c*cs+cs/2,oy+r*cs+cs/2,cs*.32,0,7); g.fill(); });
+  M.resources.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#5aa9ff'; g.fillRect(ox+c*cs+cs*.25,oy+r*cs+cs*.25,cs*.5,cs*.5); });
   M.refuges.forEach(([r,c])=>{ g.strokeStyle='#52d58e'; g.lineWidth=1.5; g.strokeRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2); });
   const [pr,pc]=S.status.position; g.fillStyle='#5aa9ff'; g.beginPath(); g.arc(ox+pc*cs+cs/2,oy+pr*cs+cs/2,cs*.38,0,7); g.fill();
   // fitness chart
@@ -651,7 +675,7 @@ function renderCompare(){ const C=S&&S.comparison; if(!C||logMode!=='cmp') retur
   g.fillStyle=css('--ok'); g.fillText('éxito',4,10); g.fillStyle=css('--bad'); g.fillText('colisiones (0–3)',40,10); }
 
 // ------------------------------------------------------------ controls
-function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value}; }
+function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value, step_duration:Number($('fDur').value)}; }
 function syncRun(){ const b=$('bRun'); b.textContent=running?'⏸ Pausa':'▶ Iniciar'; }
 async function loop(){ if(!running) return; await call('step',{n:+$('fSpeed').value}); if(running&&S&&!S.status.finished) setTimeout(loop,330); else { running=false; syncRun(); } }
 $('bRun').addEventListener('click',()=>{ if(S&&S.status.finished){ msg('La misión terminó. Reinicie o cambie la configuración.'); return; } running=!running; syncRun(); if(running){ msg('Simulación en curso.'); loop(); } else msg('Pausada.'); });
@@ -660,6 +684,7 @@ $('bReset').addEventListener('click',async()=>{ running=false; syncRun(); if(awa
 $('bApply').addEventListener('click',async()=>{ running=false; syncRun(); if(await call('configure',formConfig())){ gaRunSel=null; msg('Configuración aplicada. Nuevo terreno generado.'); } });
 $('fBattery').addEventListener('input',()=>$('lBat').textContent=$('fBattery').value+' %');
 $('fSpeed').addEventListener('input',()=>$('lSpeed').textContent=$('fSpeed').value+'×');
+$('fDur').addEventListener('input',()=>$('lDur').textContent=(+$('fDur').value).toFixed(1)+' s (aplicar)');
 async function choosePlanet(name){ running=false; syncRun(); const P=PLANETS[name]; const cfg={...formConfig(),planet:name};
   const v=await api('validate',cfg); if(v.error){ msg(v.error+(P&&P.gas?' Presione otra vez para usar el modo sonda.':''),true);
     if(P&&P.gas){ $('fMode').value='sonda'; } return; }
@@ -679,7 +704,7 @@ async function init(){
     const o=await call('inject',args); if(o){ const e=o.map.events.slice(-1)[0]; if(b.dataset.ev==='meteorito'&&e&&e.position) meteorFx(e.position); msg('Evento: '+b.title+'. El supervisor lo evaluará en el próximo paso.'); } }));
   buildFeat(); initScene();
   await call('state',{});
-  $('fMode').value=S.config.mode==='rover'?'rover':'sonda'; $('fSeed').value=S.config.seed; $('fDiff').value=S.config.difficulty; $('fBattery').value=S.config.battery; $('lBat').textContent=S.config.battery+' %'; $('fPolicy').value=S.config.policy;
+  $('fMode').value=S.config.mode==='rover'?'rover':'sonda'; $('fSeed').value=S.config.seed; $('fDiff').value=S.config.difficulty; $('fBattery').value=S.config.battery; $('lBat').textContent=S.config.battery+' %'; $('fPolicy').value=S.config.policy; $('fDur').value=S.config.step_duration; $('lDur').textContent=(+S.config.step_duration).toFixed(1)+' s';
 }
 if (window.ARES_BOOT) window.ARES_BOOT.then(init).catch(e=>msg('No se pudo iniciar el motor Python: '+e,true)); else init();
 </script>

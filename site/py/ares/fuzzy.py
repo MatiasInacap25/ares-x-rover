@@ -62,6 +62,8 @@ class FuzzyController:
         ('Temperatura caliente: parar y evaluar protección.', (('temperature', 'caliente'),), 'parar'),
         ('Temperatura fría: lento para proteger equipos.', (('temperature', 'fria'),), 'lenta'),
         ('Batería alta, distancia media y temperatura templada: moderado.', (('battery', 'alta'), ('distance', 'media'), ('temperature', 'templada')), 'moderada'),
+        ('Batería baja y riesgo lejano: moderado para conservar energía.', (('battery', 'baja'), ('distance', 'lejos')), 'moderada'),
+        ('Riesgo lejano y pendiente media: moderado.', (('distance', 'lejos'), ('slope', 'media')), 'moderada'),
     )
 
     def __init__(self, rules=None):
