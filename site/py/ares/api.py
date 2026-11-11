@@ -241,6 +241,13 @@ class Session:
         self._start()
         return self.snapshot()
 
+    def cmd_drone(self, enabled=True):
+        """Scout drone on or off in the running mission (and every ghost), without restarting."""
+        self.mission.set_drone(enabled)
+        self.config = dict(self.config, drone=bool(enabled))   # kept on reset and new missions
+        self._ghosts_do(lambda ghost: ghost.set_drone(enabled))
+        return self.snapshot()
+
     def cmd_ghosts(self, enabled=True):
         """Ghost race on or off. Runners must start together, so the mission restarts."""
         if not isinstance(enabled, bool):

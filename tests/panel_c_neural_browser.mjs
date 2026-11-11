@@ -104,12 +104,14 @@ try {
         check(S.planet.name === 'Marte' && $('fMode').value === 'sonda', 'Gas planet must reject wheels');
         await click('[data-planet="' + planet.name + '"]');
       }
-      check(S.planet.name === planet.name && S.rna === null, 'Planet did not reset prediction');
+      // the button validates first and configures after: wait for the configure reply, not the first one
+      await waitFor(() => S.planet.name === planet.name && !busy, 'planet ' + planet.name);
+      check(S.rna === null, 'Planet did not reset prediction');
       if (travelSkip) travelSkip(); await click('#bStep');
       if (S.rna) liveRendered();
       else check($('nnProbs').textContent.includes('Sin predicción'), 'D shows a nonexistent prediction');
     });
-    for (const selector of ['#bReset', '#bApply', '#bGhost', '#bDrone']) {
+    for (const selector of ['#bReset', '#bApply', '#bGhost']) {
       await test(selector + ' clears stale live feature inputs', async () => {
         const old = META.features.map(f => $('nf_' + f).value);
         await click(selector);
@@ -138,9 +140,17 @@ try {
       const step = S.status.step; await sleep(1500);
       check(!running && S.status.step === step, 'Paused mission kept stepping'); liveRendered();
     });
-    await test('Ghost and drone toggles refresh the main live inference', async () => {
-      for (const selector of ['#bGhost', '#bGhost', '#bDrone', '#bDrone']) {
+    await test('Ghost toggles refresh the main live inference', async () => {
+      for (const selector of ['#bGhost', '#bGhost']) {
         await click(selector); check(S.rna === null, 'Toggle kept old prediction');
+        await click('#bStep'); liveRendered();
+      }
+    });
+    await test('Drone toggles keep the mission, its step and the live inference', async () => {
+      for (const selector of ['#bDrone', '#bDrone']) {
+        const step = S.status.step, rna = JSON.stringify(S.rna);
+        await click(selector);
+        check(S.status.step === step && JSON.stringify(S.rna) === rna, 'Drone toggle restarted the mission');
         await click('#bStep'); liveRendered();
       }
     });

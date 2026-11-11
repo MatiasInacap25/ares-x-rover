@@ -84,3 +84,56 @@ def test_drone_through_the_panel_api():
     snapshot = session.dispatch('step', {})
     assert snapshot['drone']['flying'] and len(snapshot['drone']['position']) == 2
     assert 'error' in session.dispatch('configure', {'drone': 'quizás'})
+
+
+# ---- toggling the drone during a mission (no restart) ----
+
+def test_drone_can_be_turned_on_mid_mission_without_restarting():
+    mission = started(steps=4)
+    step, position, path = mission.step_index, mission.position, list(mission.path)
+    entry = mission.set_drone(True)
+    assert (mission.step_index, mission.position, mission.path) == (step, position, path)
+    assert mission.config['drone'] is True and entry['kind'] == 'dron_activado' and entry['step'] == step
+    assert mission.metrics['drone_steps'] == 0
+    mission.step()
+    assert mission.drone['flying'] and mission.metrics['drone_steps'] == 1
+
+
+def test_drone_can_be_turned_off_mid_mission_and_stops_flying():
+    mission = started(steps=2, drone=True)
+    flown = mission.metrics['drone_steps']
+    entry = mission.set_drone(False)
+    assert entry['kind'] == 'dron_desactivado' and mission.drone is None and mission.config['drone'] is False
+    mission.step()
+    assert mission.metrics['drone_steps'] == flown and mission.drone is None
+
+
+def test_the_toggle_is_recorded_in_the_export():
+    mission = started(steps=3)
+    mission.set_drone(True)
+    exported = mission.export_json()
+    assert any(e['kind'] == 'dron_activado' and e['step'] == 3 for e in exported['events'])
+
+
+def test_toggle_rejects_same_state_finished_mission_and_bad_values():
+    mission = started()
+    with pytest.raises(ValueError, match='ya está apagado'):
+        mission.set_drone(False)
+    with pytest.raises(ValueError, match='verdadero o falso'):
+        mission.set_drone('sí')
+    mission.run()
+    with pytest.raises(ValueError, match='terminó'):
+        mission.set_drone(True)
+
+
+def test_drone_toggle_through_the_api_keeps_the_mission_and_reaches_the_ghosts():
+    session = Session(seed=42)
+    session.dispatch('ghosts', {'enabled': True})
+    before = session.dispatch('step', {'n': 3})
+    snapshot = session.dispatch('drone', {'enabled': True})
+    assert snapshot['status']['step'] == before['status']['step'] == 3
+    assert snapshot['map']['path'] == before['map']['path'] and snapshot['config']['drone'] is True
+    assert all(g.config['drone'] for g in session.ghosts.values())
+    assert session.dispatch('reset')['config']['drone'] is True        # the choice survives a restart
+    assert session.dispatch('drone', {'enabled': False})['config']['drone'] is False
+    assert 'error' in session.dispatch('drone', {'enabled': False})

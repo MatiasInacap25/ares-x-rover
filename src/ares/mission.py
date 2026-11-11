@@ -762,6 +762,35 @@ class HybridMission:
         if self.profile.name == 'Venus':
             self.health = max(0., self.health - .4)  # corrosion (supuesto)
 
+    def set_drone(self, enabled):
+        """Turn the scout drone on or off during the mission, without restarting it.
+
+        The change is logged with its step (and exported), so the final config is
+        never mistaken for a drone that flew from the start.
+        """
+        if not isinstance(enabled, (bool, np.bool_)):
+            raise ValueError('enabled: debe ser verdadero o falso')
+        enabled = bool(enabled)
+        if self.finished:
+            raise ValueError('La misión ya terminó: reinicie para cambiar el dron.')
+        if enabled == self.config['drone']:
+            raise ValueError('El dron ya está ' + ('activado.' if enabled else 'apagado.'))
+        self.config = dict(self.config, drone=enabled)
+        if enabled:
+            self.drone = dict(position=list(self.position), flying=False, reason='Despega en el próximo paso.',
+                              scanned=[], found=[])
+        else:
+            self.drone = None
+        entry = dict(step=self.step_index, kind='dron_activado' if enabled else 'dron_desactivado',
+                     label='Dron activado' if enabled else 'Dron desactivado',
+                     message=(f'El operador activó el dron en el paso {self.step_index}: '
+                              'explora la ruta desde el próximo paso.') if enabled else
+                             f'El operador apagó el dron en el paso {self.step_index}: el rover sigue solo con sus sensores.',
+                     position=None)
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+        return entry
+
     def _drone_scan(self):
         """Scout drone: flies the next cells of the route and shares hazards with the rover.
 

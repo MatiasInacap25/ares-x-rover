@@ -165,7 +165,7 @@ Agregado el 2026-11-11 a pedido del usuario.
 - Límite conocido: la historia vive en el navegador; al recargar la página empieza desde el paso actual.
 
 ### F16 · Dron explorador
-- Parámetro `drone` (apagado por defecto; con él apagado la traza no cambia). Botón «Dron explorador» en el panel; al cambiarlo la misión se reinicia.
+- Parámetro `drone` (apagado por defecto; con él apagado la traza no cambia). Botón «Dron explorador» en el panel. Se activa y apaga en caliente (cambio del 2026-11-11 a pedido del usuario): la misión conserva paso y ruta, el cambio queda en la bitácora y la exportación con su paso, se aplica también a los fantasmas y se mantiene al reiniciar.
 - Supuestos de simulación: en cada paso revisa las 4 celdas siguientes de la ruta y sus vecinas, y agrega al mapa creído los barrancos y obstáculos reales que ve; si alguno está en la ruta, se replanifica con motivo `DRON_DETECTA_PELIGRO`. Cada vuelo cuesta 0,08 % de batería del rover.
 - Queda en tierra con tormenta de polvo, viento fuerte o batería bajo 15 %. No existe en modo sonda.
 - Criterio: un barranco oculto en la ruta se descubre antes del veto `R04`; 0 violaciones de seguridad. Medido en 20 semillas con 6 barrancos ocultos: pasos 38,3 → 36,7, replanificaciones 4,45 → 3,65, vetos R04 0,55 → 0, batería final 73,9 % → 69,8 %.
