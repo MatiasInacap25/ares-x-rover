@@ -143,7 +143,7 @@ canvas.fill{display:block;width:100%}
     <button class="btn c" id="bApply" style="width:100%;margin-top:4px">Aplicar configuración</button>
     <div class="lbl">Simulación</div>
     <div class="g3"><button class="btn go" id="bRun">▶ Iniciar</button><button class="btn c" id="bStep">Paso</button><button class="btn c" id="bReset">Reiniciar</button></div>
-    <div class="sl" style="margin-top:4px">Velocidad<span id="lSpeed">1×</span><input id="fSpeed" type="range" min="1" max="6" step="1" value="1"></div>
+    <div class="sl" style="margin-top:4px">Velocidad del modo automático<span id="lSpeed">×1</span><input id="fSpeed" type="range" min="0" max="5" step="1" value="2"></div>
     <div class="lbl">Motor de eventos</div>
     <div class="g2" id="events"></div>
     <div class="lbl">Editar terreno real (clic en 3D)</div>
@@ -393,6 +393,13 @@ function buildDynamic(){
   const planned=pathLine(M.route,0xffd84a,.08,false,.42); if(planned) V.dyn.add(planned);
   const done=pathLine(M.path,0x5aa9ff,.11,false,.25); if(done) V.dyn.add(done);
 }
+function chileFlagTexture(){ // drawn by code: no external image files
+  const c=document.createElement('canvas'); c.width=300; c.height=200; const g=c.getContext('2d');
+  g.fillStyle='#ffffff'; g.fillRect(0,0,300,100); g.fillStyle='#d52b1e'; g.fillRect(0,100,300,100); g.fillStyle='#0039a6'; g.fillRect(0,0,100,100);
+  g.fillStyle='#ffffff'; g.beginPath(); for(let i=0;i<10;i++){ const r=i%2?13:33, a=-Math.PI/2+i*Math.PI/5; g.lineTo(50+r*Math.cos(a),50+r*Math.sin(a)); } g.closePath(); g.fill();
+  const t=new THREE.CanvasTexture(c); t.anisotropy=4; return t; }
+function flagPlane(tex,w,h,x,y,z,ry,double){ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:double?THREE.DoubleSide:THREE.FrontSide}));
+  m.position.set(x,y,z); m.rotation.y=ry; return m; }
 function buildRover(){ const g=new THREE.Group(); const white=new THREE.MeshStandardMaterial({color:0xe9e6df,roughness:.5,metalness:.3}), dark=new THREE.MeshStandardMaterial({color:0x2b2f38,roughness:.6,metalness:.4});
   const body=new THREE.Mesh(new THREE.BoxGeometry(1.05,.38,1.35),white); body.position.y=.62; body.castShadow=true; g.add(body);
   const deck=new THREE.Mesh(new THREE.BoxGeometry(1.25,.05,1.55),new THREE.MeshStandardMaterial({color:0x1f3a7a,roughness:.3,metalness:.6,emissive:0x0a1430})); deck.position.y=.84; deck.castShadow=true; g.add(deck);
@@ -405,7 +412,14 @@ function buildRover(){ const g=new THREE.Group(); const white=new THREE.MeshStan
   const beacon=new THREE.Mesh(new THREE.SphereGeometry(.07,8,6),new THREE.MeshBasicMaterial({color:0xffc04d})); beacon.position.set(-.35,1.47,-.45); g.add(beacon); g.userData.beacon=beacon;
   const probe=new THREE.Group(); const balloon=new THREE.Mesh(new THREE.SphereGeometry(.9,20,14),new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:.4})); balloon.position.y=2.2;
   const gondola=new THREE.Mesh(new THREE.BoxGeometry(.6,.35,.6),dark); gondola.position.y=.9; const rope=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.9,4),white); rope.position.y=1.4;
-  probe.add(balloon,gondola,rope); probe.visible=false; g.add(probe); g.userData.probe=probe; g.userData.roverParts=g.children.filter(o=>o!==probe);
+  const flag=chileFlagTexture();
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,1.0,6),white); pole.position.set(.42,1.34,-.55); g.add(pole);
+  const banner=flagPlane(flag,.54,.36,.42,1.64,-.28,Math.PI/2,true); g.add(banner); g.userData.banner=banner;
+  g.add(flagPlane(flag,.42,.28,.531,.62,0,Math.PI/2), flagPlane(flag,.42,.28,-.531,.62,0,-Math.PI/2));
+  const topFlag=(w,h,y,z)=>{ const m=flagPlane(flag,w,h,0,y,z,0); m.rotation.x=-Math.PI/2; return m; }; // readable from the top-down camera
+  g.add(topFlag(.66,.44,.872,-.38));
+  probe.add(balloon,gondola,rope, flagPlane(flag,.42,.28,.305,.9,0,Math.PI/2), flagPlane(flag,.42,.28,-.305,.9,0,-Math.PI/2),
+            flagPlane(flag,.42,.28,0,.9,.305,0), flagPlane(flag,.42,.28,0,.9,-.305,Math.PI), topFlag(.9,.6,3.105,0)); probe.visible=false; g.add(probe); g.userData.probe=probe; g.userData.roverParts=g.children.filter(o=>o!==probe);
   return g; }
 function setRoverStyle(gas){ V.rover.userData.roverParts.forEach(o=>o.visible=!gas); V.rover.userData.probe.visible=!!gas; }
 let lastPos=null, lastStep=-1, lastConfigKey='';
@@ -655,13 +669,20 @@ function renderCompare(){ const C=S&&S.comparison; if(!C||logMode!=='cmp') retur
 // ------------------------------------------------------------ controls
 function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value, step_duration:Number($('fDur').value)}; }
 function syncRun(){ const b=$('bRun'); b.textContent=running?'⏸ Pausa':'▶ Iniciar'; }
-async function loop(){ if(!running) return; await call('step',{n:+$('fSpeed').value}); if(running&&S&&!S.status.finished) setTimeout(loop,330); else { running=false; syncRun(); } }
-$('bRun').addEventListener('click',()=>{ if(S&&S.status.finished){ msg('La misión terminó. Reinicie o cambie la configuración.'); return; } running=!running; syncRun(); if(running){ msg('Simulación en curso.'); loop(); } else msg('Pausada.'); });
+const BASE_STEP_MS=700, SPEEDS=[.5,.75,1,1.5,2,4];
+const speedMult=()=>SPEEDS[+$('fSpeed').value]||1;
+let runId=0; // each start gets its own id, so a stale timer from a previous run can never step
+async function loop(id){ if(!running||id!==runId) return; const t0=performance.now(); await call('step',{n:1});
+  if(id!==runId) return;
+  // Cadence is measured step to step, so engine latency does not slow the simulation further.
+  const wait=Math.max(0,BASE_STEP_MS/speedMult()-(performance.now()-t0));
+  if(running&&S&&!S.status.finished) setTimeout(()=>loop(id),wait); else { running=false; syncRun(); } }
+$('bRun').addEventListener('click',()=>{ if(S&&S.status.finished){ msg('La misión terminó. Reinicie o cambie la configuración.'); return; } running=!running; syncRun(); if(running){ msg('Simulación en curso.'); loop(++runId); } else msg('Pausada.'); });
 $('bStep').addEventListener('click',()=>{ running=false; syncRun(); call('step',{n:1}); });
 $('bReset').addEventListener('click',async()=>{ running=false; syncRun(); if(await call('reset',{})){ gaRunSel=null; msg('Misión reiniciada con la misma semilla.'); } });
 $('bApply').addEventListener('click',async()=>{ running=false; syncRun(); if(await call('configure',formConfig())){ gaRunSel=null; msg('Configuración aplicada. Nuevo terreno generado.'); } });
 $('fBattery').addEventListener('input',()=>$('lBat').textContent=$('fBattery').value+' %');
-$('fSpeed').addEventListener('input',()=>$('lSpeed').textContent=$('fSpeed').value+'×');
+$('fSpeed').addEventListener('input',()=>$('lSpeed').textContent='×'+String(speedMult()).replace('.',','));
 $('fDur').addEventListener('input',()=>$('lDur').textContent=(+$('fDur').value).toFixed(1)+' s (aplicar)');
 async function choosePlanet(name){ running=false; syncRun(); const P=PLANETS[name]; const cfg={...formConfig(),planet:name};
   const v=await api('validate',cfg); if(v.error){ msg(v.error+(P&&P.gas?' Presione otra vez para usar el modo sonda.':''),true);
