@@ -127,6 +127,10 @@ Comandos de verificación:
   - Aceptación: un barranco colocado queda marcado sin activar "ocultos" y sin dar un paso.
   - Verificado en Chrome. Archivos: `web/index.html`
 
+- [x] **T17 (F13) · Varios destinos con el mejor orden de visita** (agregada el 2026-11-11 a pedido del usuario)
+  - Aceptación: el orden coincide con el óptimo exacto; el rover visita todos; el recorrido completo respeta la batería.
+  - Verificado: 14 tests nuevos y prueba en Chrome con 4 destinos. Archivos: `src/ares/genetic.py`, `src/ares/mission.py`, `src/ares/api.py`, `web/index.html`
+
 ### Punto de control final
 - [ ] Criterios de éxito del spec cumplidos
 - [ ] Preguntar antes de `git push` (publica en producción)

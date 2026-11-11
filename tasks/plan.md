@@ -51,6 +51,7 @@ y termina con un commit local. No se hace `git push` sin preguntar, porque publi
 - [x] T14 (F10): vista 2D y 3D
 - [x] T15 (F11): terreno con forma de superficie planetaria
 - [x] T16 (F12): ediciones del operador visibles
+- [x] T17 (F13): varios destinos con el mejor orden de visita
 - [ ] T13: documentación, notebook, sitio y verificación final
 
 ### Punto de control final

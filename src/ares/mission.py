@@ -16,7 +16,7 @@ import numpy as np
 
 from .events import Event
 from .fuzzy import FuzzyController
-from .genetic import GeneticPlanner
+from .genetic import GeneticPlanner, optimize_visit_order
 from .logger import MissionLogger, clean
 from .neural import NeuralPerception
 from .planet import ASSUMPTION, PROFILES, PlanetProfile, normalize
@@ -40,6 +40,7 @@ DAY_LENGTH = 30           # steps per half day/night cycle (supuesto)
 MAX_STEPS = 400
 INSTRUMENT_BATTERY = 5.   # battery recovered with each instrument cache (supuesto)
 # Event effects (all values are simulation assumptions).
+MAX_DESTINATIONS = 8
 HEAT_STEPS, HEAT_EXTERNAL, HEAT_INTERNAL, HEAT_ENERGY = 12, 40., 35., 1.2
 WIND_STEPS, WIND_ENERGY, WIND_SPEED = 5, 1.3, 22.
 LINK_STEPS = 10
@@ -200,7 +201,8 @@ class HybridMission:
         self.link_down_steps = 0
         self.queued_orders = 0
         self.sensor_timers = {}
-        self.destination = None  # operator-defined waypoint (F6)
+        self.destinations = []  # operator waypoints in visiting order (F6, F13)
+        self.tour_cells = 0
         self.day_counter = 0
         self.no_route_steps = 0
         self.nothing_left = False
@@ -356,6 +358,8 @@ class HybridMission:
             self.rna_marks.add(cell)
 
     def _plan(self, reason):
+        if self.destinations and not self.returning:
+            self._order_destinations()
         self._plan_once(reason)
         if len(self.route) <= 1 and self.rna_marks:
             # No route while relying on unconfirmed RNA beliefs: discard them once and
@@ -373,14 +377,10 @@ class HybridMission:
             self.event_log.append(entry)
             self.pending_events.append(entry)
             self._plan_once(reason + '+REVISION_RNA')
-        if len(self.route) <= 1 and self.destination is not None and not self.returning:
-            # The destination became unreachable (new hazard or low energy): drop it and resume.
-            entry = dict(step=self.step_index, kind='destino_descartado', label='Destino descartado',
-                         message=f'El destino {list(self.destination)} ya no tiene ruta segura: se descarta y se retoma la misión.',
-                         position=list(self.destination))
-            self.destination = None
-            self.event_log.append(entry)
-            self.pending_events.append(entry)
+        while len(self.route) <= 1 and self.destinations and not self.returning:
+            # The next destination became unreachable (new hazard or low energy): drop it and resume.
+            self._drop_destination(self.destinations[0])
+            self._order_destinations()
             self._plan_once(reason + '+SIN_DESTINO')
         if len(self.route) <= 1 and not self.returning and self.position not in self.world.refuges:
             # No feasible exploration plan (typically low energy): head for the nearest
@@ -389,6 +389,56 @@ class HybridMission:
             if back and len(back) > 1:
                 self.returning = True
                 self._plan_once(reason + '+RETORNO')
+
+    @property
+    def destination(self):
+        """Next operator destination in the optimised visiting order."""
+        return self.destinations[0] if self.destinations else None
+
+    def _drop_destination(self, cell):
+        self.destinations.remove(cell)
+        entry = dict(step=self.step_index, kind='destino_descartado', label='Destino descartado',
+                     message=f'El destino {list(cell)} ya no tiene ruta segura: se descarta y se retoma la misión.',
+                     position=list(cell))
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+
+    def _tour(self, cells):
+        """Best order to visit ``cells`` from the current position, ending at a refuge.
+
+        Distances come from the believed map; the order is evolved by the
+        permutation GA. Returns (ordered cells, total cells including the return).
+        """
+        nodes = [self.position] + list(cells)
+        hops = lambda path: len(path) - 1 if path else math.inf
+        leg = [[0 if a == b else hops(self._bfs(a, b)) for b in nodes] for a in nodes]
+        closing = [hops(self._bfs(node, goals=set(self.world.refuges))) for node in nodes]
+        result = optimize_visit_order(leg, closing, seed=self.seed)
+        return [nodes[i + 1] for i in result['order']], result['cost']
+
+    def _order_destinations(self):
+        """Drop unreachable destinations and keep the rest in the best visiting order."""
+        for cell in [c for c in self.destinations if self._bfs(self.position, c) is None]:
+            self._drop_destination(cell)
+        if not self.destinations:
+            self.tour_cells = 0
+            return
+        order, self.tour_cells = self._tour(self.destinations)
+        if order != self.destinations and len(order) > 1:
+            entry = dict(step=self.step_index, kind='orden_destinos', label='Orden de visita optimizado',
+                         message='El AG de permutaciones ordenó los destinos: '
+                                 + ' → '.join(str(list(c)) for c in order)
+                                 + f' ({self.tour_cells} celdas con retorno al refugio).', position=None)
+            self.event_log.append(entry)
+            self.pending_events.append(entry)
+        self.destinations = order
+
+    def destination_tour(self):
+        """Cells joining the destinations in visiting order (the leg to the first is the route)."""
+        cells = [self.destinations[0]] if self.destinations else []
+        for a, b in zip(self.destinations, self.destinations[1:]):
+            cells += (self._bfs(a, b) or [a, b])[1:]
+        return cells
 
     def _plan_once(self, reason):
         started = time.perf_counter()
@@ -526,41 +576,66 @@ class HybridMission:
         self.ga['step'] = self.step_index + 1  # logged with the next step record
         return True
 
+    def _destination_cell(self, position):
+        try:
+            cell = tuple(int(v) for v in position)
+            assert len(cell) == 2
+        except (TypeError, ValueError, AssertionError):
+            raise ValueError('Destino inválido: se esperan (fila, columna).') from None
+        return cell
+
+    def remove_destination(self, position):
+        """Operator removes one destination; the rest are reordered."""
+        cell = self._destination_cell(position)
+        if cell not in self.destinations:
+            raise ValueError('No hay un destino fijado en esa celda.')
+        self.destinations.remove(cell)
+        entry = dict(step=self.step_index, kind='destino_cancelado', label='Destino cancelado',
+                     message=f'El operador quitó el destino {list(cell)}: quedan {len(self.destinations)}.',
+                     position=list(cell))
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+        self._replan_now('DESTINO_CANCELADO')
+        return entry
+
     def set_destination(self, position):
-        """Operator waypoint: validated, planned with the same pipeline, never above safety."""
+        """Add an operator destination (None clears them all).
+
+        Validated, planned with the same pipeline and never above safety. With
+        several destinations the visiting order is the shortest tour found by the GA.
+        """
         if self.finished:
             raise ValueError('La misión ya terminó: reinicie para fijar un destino.')
         if position is None:
-            if self.destination is None:
+            if not self.destinations:
                 raise ValueError('No hay destino fijado.')
             entry = dict(step=self.step_index, kind='destino_cancelado', label='Destino cancelado',
-                         message='El operador quitó el destino: se retoma la misión.', position=list(self.destination))
-            self.destination = None
+                         message='El operador quitó los destinos: se retoma la misión.', position=list(self.destinations[0]))
+            self.destinations, self.tour_cells = [], 0
         else:
-            try:
-                cell = tuple(int(v) for v in position)
-                assert len(cell) == 2
-            except (TypeError, ValueError, AssertionError):
-                raise ValueError('Destino inválido: se esperan (fila, columna).') from None
+            cell = self._destination_cell(position)
             if not self.world.in_bounds(cell):
                 raise ValueError('Destino fuera del mapa.')
             if cell == self.position:
                 raise ValueError('El rover ya está en esa celda.')
+            if cell in self.destinations:
+                raise ValueError('Ese destino ya está fijado.')
+            if len(self.destinations) >= MAX_DESTINATIONS:
+                raise ValueError(f'Máximo {MAX_DESTINATIONS} destinos a la vez.')
             if not self.belief.traversable(cell, self.profile.mode):
                 raise ValueError('Destino inválido: la celda es un obstáculo o barranco conocido.')
-            out = self._bfs(self.position, cell)
-            if out is None:
+            if self._bfs(self.position, cell) is None:
                 raise ValueError('Destino inalcanzable: no existe ruta conocida hasta esa celda.')
-            back = self._bfs(cell, goals=set(self.world.refuges))
-            cells = len(out) - 1 + (len(back) - 1 if back else math.inf)
+            order, cells = self._tour(self.destinations + [cell])
             need = cells * self.cell_cost(PLAN_SPEED)
             if need > self.battery:
-                raise ValueError('Destino rechazado: la energía no alcanza para ir y volver a un refugio '
+                raise ValueError('Destino rechazado: la energía no alcanza para visitar los destinos y volver a un refugio '
                                  f'(se requiere {need:.1f} % y hay {self.battery:.1f} %): no hay retorno seguro.')
-            self.destination = cell
+            self.destinations.append(cell)
             self.returning = False
             entry = dict(step=self.step_index, kind='destino', label='Destino fijado',
-                         message=f'Destino del operador en {list(cell)}: {len(out) - 1} celdas de ida.', position=list(cell))
+                         message=f'Destino del operador en {list(cell)}: {len(self.destinations)} destino(s), '
+                                 f'recorrido de {cells} celdas con retorno al refugio.', position=list(cell))
         self.event_log.append(entry)
         self.pending_events.append(entry)
         self._replan_now(entry['kind'].upper())
@@ -811,11 +886,13 @@ class HybridMission:
                     self.world.visited_science.add(cell)
                     self.done.add(cell)
                     self.metrics['science_samples'] += 1
-                if cell == self.destination:
+                if cell in self.destinations:
+                    self.destinations.remove(cell)
+                    left = len(self.destinations)
                     entry = dict(step=self.step_index, kind='destino_alcanzado', label='Destino alcanzado',
-                                 message=f'Destino {list(cell)} alcanzado: se retoman los objetivos pendientes y el retorno.',
+                                 message=f'Destino {list(cell)} alcanzado: '
+                                         + (f'quedan {left} destino(s).' if left else 'se retoman los objetivos pendientes y el retorno.'),
                                  position=list(cell))
-                    self.destination = None
                     self.event_log.append(entry)
                     self.pending_events.append(entry)
                     self.replan_reason = 'DESTINO_ALCANZADO'

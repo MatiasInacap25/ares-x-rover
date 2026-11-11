@@ -251,3 +251,66 @@ class GeneticPlanner:
                     stopped_early=generation < self.generations,
                     message='Ruta factible (supuesto de simulación)' if feasible else
                     'Sin solución: retornar solo si es factible; de lo contrario, esperar en modo seguro.')
+
+
+def optimize_visit_order(leg, closing, seed=0, population_size=40, generations=60,
+                         crossover_rate=.9, mutation_rate=.3, elitism=2, tournament_size=3):
+    """Permutation GA (travelling-salesman family): best order to visit n stops.
+
+    ``leg[i][j]`` is the cost from node i to node j, node 0 being the start and
+    nodes 1..n the stops; ``closing[i]`` is the cost of ending the tour at node i
+    (the safe return). Returns the order as stop indices 0..n-1, its cost and the
+    best cost per generation. Seeded, so the same inputs give the same order.
+    """
+    stops = len(leg) - 1
+    if stops <= 0:
+        return dict(order=[], cost=0, history=[0])
+
+    def cost(order):
+        total, node = 0, 0
+        for stop in order:
+            total += leg[node][stop + 1]
+            node = stop + 1
+        return total + closing[node]
+
+    rng = random.Random(seed)
+    base = list(range(stops))
+    nearest, node, left = [], 0, set(base)       # nearest-neighbour seed individual
+    while left:
+        nxt = min(left, key=lambda s: (leg[node][s + 1], s))
+        nearest.append(nxt)
+        left.discard(nxt)
+        node = nxt + 1
+    population = [nearest, base[:]]
+    while len(population) < population_size:
+        population.append(rng.sample(base, stops))
+    if stops < 3:                                # every permutation fits in the population
+        population = [nearest] + [list(p) for p in ([base, base[::-1]] if stops == 2 else [base])]
+    history = []
+    for _ in range(generations):
+        population.sort(key=lambda o: (cost(o), o))
+        history.append(cost(population[0]))
+        if stops < 3:
+            break
+        children = [o[:] for o in population[:elitism]]
+        while len(children) < population_size:
+            a = min(rng.sample(population, tournament_size), key=cost)
+            b = min(rng.sample(population, tournament_size), key=cost)
+            child = a[:]
+            if rng.random() < crossover_rate:    # order crossover (OX)
+                i, j = sorted(rng.sample(range(stops + 1), 2))
+                kept = a[i:j]
+                rest = [s for s in b if s not in kept]
+                child = rest[:i] + kept + rest[i:]
+            if rng.random() < mutation_rate:     # swap mutation
+                i, j = rng.sample(range(stops), 2)
+                child[i], child[j] = child[j], child[i]
+            if rng.random() < mutation_rate:     # segment reversal (2-opt move)
+                i, j = sorted(rng.sample(range(stops + 1), 2))
+                child[i:j] = child[i:j][::-1]
+            children.append(child)
+        population = children
+    population.sort(key=lambda o: (cost(o), o))
+    best = population[0]
+    history.append(cost(best))
+    return dict(order=best, cost=cost(best), history=history)

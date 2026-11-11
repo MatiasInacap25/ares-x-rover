@@ -151,9 +151,9 @@ canvas.fill{display:block;width:100%}
     <div class="sl" style="margin-top:4px">Velocidad del modo automático<span id="lSpeed">×1</span><input id="fSpeed" type="range" min="0" max="5" step="1" value="2"></div>
     <div class="lbl">Motor de eventos</div>
     <div class="g2" id="events"></div>
-    <div class="lbl">Destino del rover</div>
-    <div class="g2"><button class="btn c" id="bDest">◎ Fijar destino</button><button class="btn c" id="bDestClear">Quitar destino</button></div>
-    <div class="small" id="destInfo" style="margin-top:3px">Sin destino. Presione «Fijar destino» y haga clic en una celda del mapa.</div>
+    <div class="lbl">Destinos del rover</div>
+    <div class="g2"><button class="btn c" id="bDest">◎ Agregar destinos</button><button class="btn c" id="bDestClear">Quitar todos</button></div>
+    <div class="small" id="destInfo" style="margin-top:3px"></div>
     <div class="lbl">Editar terreno real (clic en el mapa)</div>
     <select id="fTool"><option value="">Sin edición</option><option value="obstaculo">Colocar obstáculo</option><option value="barranco">Colocar barranco</option><option value="limpiar">Limpiar celda</option></select>
     <div class="lbl">Exportar</div>
@@ -382,10 +382,12 @@ function buildDynamic(){
   const hidCliffs=new Set(M.hidden_cliffs.map(key));
   const pin=(x,z,color)=>{ const y=heightAt(x,z); const stick=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,2.2,6),new THREE.MeshBasicMaterial({color:0xffffff})); stick.position.set(x,y+1.1,z);
     const head=new THREE.Mesh(new THREE.SphereGeometry(.2,12,8),new THREE.MeshBasicMaterial({color})); head.position.set(x,y+2.3,z); V.dyn.add(stick,head); };
-  if(M.destination){ const [x,z]=cellXZ(M.destination[0],M.destination[1],M), y=heightAt(x,z);
-    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,8,8),new THREE.MeshBasicMaterial({color:0xff4fd8,transparent:true,opacity:.75})); beam.position.set(x,y+4,z);
-    const ring=new THREE.Mesh(new THREE.TorusGeometry(.75,.07,8,28),new THREE.MeshBasicMaterial({color:0xff4fd8})); ring.rotation.x=Math.PI/2; ring.position.set(x,y+.25,z); ring.userData.pulse=true;
-    V.dyn.add(beam,ring,tile(x,z,0xff4fd8,.3)); }
+  (M.destinations||[]).forEach(([dr,dc],i)=>{ const [x,z]=cellXZ(dr,dc,M), y=heightAt(x,z), next=i===0;
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,next?8:5,8),new THREE.MeshBasicMaterial({color:0xff4fd8,transparent:true,opacity:next?.75:.4})); beam.position.set(x,y+(next?4:2.5),z);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.75,.07,8,28),new THREE.MeshBasicMaterial({color:0xff4fd8})); ring.rotation.x=Math.PI/2; ring.position.set(x,y+.25,z); ring.userData.pulse=next;
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:numberTexture(i+1),depthTest:false})); tag.scale.set(1.5,1.5,1); tag.position.set(x,y+(next?8.6:5.6),z);
+    V.dyn.add(beam,ring,tag,tile(x,z,0xff4fd8,next?.3:.18)); });
+  if((M.tour||[]).length>1){ const tour=pathLine(M.tour,0xff4fd8,.05,false,.5); if(tour) V.dyn.add(tour); }
   (M.events||[]).forEach(e=>{ if(!e.position) return; const [x,z]=cellXZ(e.position[0],e.position[1],M);
     // Operator edits are shown at once, even while the rover has not sensed them yet.
     if(e.kind==='barranco'&&hidCliffs.has(key(e.position))){ V.dyn.add(tile(x,z,0xff5a4f,.34)); pin(x,z,0xff5a4f); }
@@ -493,11 +495,14 @@ function bindOrbit(canvas){ let drag=null;
     V.cam.theta-=dx*.006; V.cam.phi=Math.max(.15,Math.min(1.45,V.cam.phi-dy*.005)); drag.x=e.clientX; drag.y=e.clientY; if(V.cam.mode==='top'&&drag.moved) setCam('orbit'); });
   canvas.addEventListener('pointerup',e=>{ canvas.style.cursor='grab'; const wasClick=drag&&!drag.moved; drag=null; if(wasClick) pick(e); });
   canvas.addEventListener('wheel',e=>{ e.preventDefault(); V.cam.radius=Math.max(6,Math.min(60,V.cam.radius*(1+Math.sign(e.deltaY)*.09))); },{passive:false}); }
+function numberTexture(n){ const numberCache=numberTexture.cache||(numberTexture.cache={}); if(numberCache[n]) return numberCache[n]; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d');
+  g.fillStyle='#ff4fd8'; g.beginPath(); g.arc(32,32,28,0,7); g.fill(); g.strokeStyle='#1a0516'; g.lineWidth=4; g.stroke();
+  g.fillStyle='#1a0516'; g.font='bold 38px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(n,32,35); return numberCache[n]=new THREE.CanvasTexture(c); }
 let destMode=false;
 function setDestMode(on){ destMode=on; $('bDest').classList.toggle('on',on); $('view').classList.toggle('picking',on||!!$('fTool').value);
-  if(on) msg('Haga clic en una celda del mapa para fijar el destino del rover.'); }
+  $('bDest').textContent=on?'✓ Terminar':'◎ Agregar destinos'; if(on) msg('Haga clic en las celdas del mapa para agregar destinos. Un clic sobre un destino lo quita.'); }
 function cellAction(row,c){ if(!S) return; const M=S.map; if(row<0||c<0||row>=M.height||c>=M.width) return;
-  if(destMode){ call('destination',{position:[row,c]}).then(o=>{ if(o){ setDestMode(false); msg(`Destino fijado en (${row},${c}). Ruta recalculada.`); } }); return; }
+  if(destMode){ const had=(M.destinations||[]).some(d=>d[0]===row&&d[1]===c); call('destination',{position:[row,c]}).then(o=>{ if(o){ const n=o.map.destinations.length; msg(had?`Destino (${row},${c}) quitado. Quedan ${n}.`:`Destino agregado en (${row},${c}). ${n>1?`El AG ordenó los ${n} destinos: recorrido de ${o.status.tour_cells} celdas.`:'Ruta recalculada.'}`); } }); return; }
   const tool=$('fTool').value; if(!tool) return;
   const label={obstaculo:'Obstáculo colocado',barranco:'Barranco colocado',limpiar:'Celda limpiada'}[tool];
   call('place',{position:[row,c],kind:tool}).then(o=>{ if(o) msg(`${label} en (${row},${c}).`+(tool==='limpiar'?'':' Queda marcado en el mapa; el rover debe descubrirlo con sus sensores.')); }); }
@@ -541,7 +546,9 @@ function draw2d(){ if(!S||viewMode!=='2d') return; const [g,w,h]=ctx2d($('map2d'
   const line=(cells,color,width,dash)=>{ if(!cells||cells.length<2) return; g.strokeStyle=color; g.lineWidth=width; g.lineJoin='round'; g.setLineDash(dash||[]); g.beginPath(); cells.forEach(([r,c],i)=>i?g.lineTo(X(c),Y(r)):g.moveTo(X(c),Y(r))); g.stroke(); g.setLineDash([]); };
   (M.candidates||[]).forEach((rt,i)=>{ if(i!==M.chosen) line(rt,'rgba(181,140,255,.7)',1.5,[3,4]); });
   line(M.route,'#ffd84a',2.5,[7,4]); line(M.path,'#5aa9ff',3.2);
-  if(M.destination){ const [r,c]=M.destination; g.strokeStyle='#ff4fd8'; g.lineWidth=2.5; [cs*.42,cs*.2].forEach(rad=>{ g.beginPath(); g.arc(X(c),Y(r),rad,0,7); g.stroke(); }); g.beginPath(); g.moveTo(X(c)-cs*.55,Y(r)); g.lineTo(X(c)+cs*.55,Y(r)); g.moveTo(X(c),Y(r)-cs*.55); g.lineTo(X(c),Y(r)+cs*.55); g.stroke(); }
+  line(M.tour,'rgba(255,79,216,.85)',1.8,[3,5]);
+  (M.destinations||[]).forEach(([r,c],i)=>{ g.strokeStyle='#ff4fd8'; g.lineWidth=i?1.6:2.5; g.beginPath(); g.arc(X(c),Y(r),cs*.42,0,7); g.stroke();
+    g.fillStyle='#ff4fd8'; g.beginPath(); g.arc(X(c),Y(r),cs*.28,0,7); g.fill(); g.fillStyle='#1a0516'; g.font=`bold ${Math.max(9,cs*.36)}px system-ui,sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(i+1,X(c),Y(r)+1); });
   const [pr,pc]=S.status.position; const pth=M.path; let ang=0; if(pth.length>1){ const a=pth[pth.length-2]; ang=Math.atan2(pr-a[0],pc-a[1]); }
   g.save(); g.translate(X(pc),Y(pr)); g.rotate(ang); g.fillStyle='#f3f1ea'; g.strokeStyle='#10131a'; g.lineWidth=1.5; g.beginPath(); g.moveTo(cs*.42,0); g.lineTo(-cs*.3,cs*.3); g.lineTo(-cs*.14,0); g.lineTo(-cs*.3,-cs*.3); g.closePath(); g.fill(); g.stroke(); g.restore();
   const fw=cs*.42, fh=cs*.28, fx=X(pc)-cs*.5, fy=Y(pr)-cs*.62; g.fillStyle='#fff'; g.fillRect(fx,fy,fw,fh/2); g.fillStyle='#d52b1e'; g.fillRect(fx,fy+fh/2,fw,fh/2); g.fillStyle='#0039a6'; g.fillRect(fx,fy,fw/3,fh/2);
@@ -550,7 +557,7 @@ function draw2d(){ if(!S||viewMode!=='2d') return; const [g,w,h]=ctx2d($('map2d'
   g.fillStyle='#a08d78'; g.font='10px JetBrains Mono, monospace'; g.textAlign='center'; for(let c=0;c<M.width;c++) g.fillText(c,X(c),oy-4); g.textAlign='right'; for(let r=0;r<M.height;r++) g.fillText(r,ox-5,Y(r)+3); g.textAlign='left'; }
 $('map2d').addEventListener('click',e=>{ if(!geom2d||!S) return; const b=$('map2d').getBoundingClientRect(); cellAction(Math.floor((e.clientY-b.top-geom2d.oy)/geom2d.cs),Math.floor((e.clientX-b.left-geom2d.ox)/geom2d.cs)); });
 $('bDest').addEventListener('click',()=>{ $('fTool').value=''; setDestMode(!destMode); });
-$('bDestClear').addEventListener('click',async()=>{ setDestMode(false); if(await call('destination',{position:null})) msg('Destino quitado: el rover retoma la misión.'); });
+$('bDestClear').addEventListener('click',async()=>{ setDestMode(false); if(await call('destination',{position:null})) msg('Destinos quitados: el rover retoma la misión.'); });
 $('fTool').addEventListener('change',()=>{ if($('fTool').value) destMode=false; setDestMode(destMode); if($('fTool').value) msg('Haga clic en una celda del mapa para aplicar la edición.'); });
 $('fReveal').addEventListener('change',()=>{ if(S){ buildDynamic(); draw2d(); } });
 
@@ -587,7 +594,7 @@ function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
     tl('Eventos','total · anomalías · contactos',`${st.events_total} · ${st.anomalies} · ${st.contacts}`,'ref','CONTEO'),
     tl('Pasos perdidos','espera · sensor degradado',`${st.wait_steps} · ${st.degraded_steps}`,'ref','CONTEO'),
     tl('Ciencia','% sitios visitados',Math.round(st.science*100)+' %','ok','PROGRESO'),
-    tl('Destino','celdas restantes',S.map.destination?(st.destination_distance??'—'):'—',S.map.destination?'warn':'ref',S.map.destination?'EN RUTA':'SIN FIJAR'),
+    tl('Destinos','pendientes · celdas al próximo',S.map.destination?`${st.destinations_left} · ${st.destination_distance??'—'}`:'—',S.map.destination?'warn':'ref',S.map.destination?'EN RUTA':'SIN FIJAR'),
     tl('Instrumentación','cajas recuperadas',`${st.instruments}/${st.instruments_total}`,st.instruments>=st.instruments_total?'ok':'ref',st.instruments>=st.instruments_total?'COMPLETO':'PENDIENTE')].join(''); }
 function renderTop(){ const st=S.status;
   if(document.activeElement!==$('fDur')){ $('fDur').value=S.config.step_duration; $('lDur').textContent=(+S.config.step_duration).toFixed(1)+' s'; }
@@ -597,7 +604,7 @@ function renderTop(){ const st=S.status;
   $('sState').textContent=label+(st.finished?' · FIN':''); $('sState').className='st st-'+st.state;
   const D=S.decision; $('sExpl').textContent=st.finished?st.outcome:(D?`${D.reason}: ${D.explanation}`:'Configure la misión y presione Iniciar.');
   document.querySelectorAll('[data-planet]').forEach(b=>b.classList.toggle('sel',b.dataset.planet===S.planet.name));
-  const dd=S.map.destination; $('destInfo').textContent=dd?`Destino en (${dd[0]},${dd[1]})`+(st.destination_distance!==null&&st.destination_distance!==undefined?` · faltan ${st.destination_distance} celdas`:''):'Sin destino. Presione «Fijar destino» y haga clic en una celda del mapa.'; }
+  const ds=S.map.destinations||[]; $('destInfo').textContent=ds.length?`${ds.length} destino(s) en orden de visita: `+ds.map((d,i)=>`${i+1}·(${d[0]},${d[1]})`).join(' → ')+` · recorrido ${st.tour_cells} celdas con retorno`:'Sin destinos. Presione «Agregar destinos» y haga clic en una o varias celdas: el AG calcula el mejor orden de visita.'; }
 
 // ------------------------------------------------------------ D · neural network
 const FEAT_LBL={distance:'Distancia',slope:'Pendiente',elevation_delta:'Δ elevación',texture:'Textura',visibility:'Visibilidad',vibration:'Vibración'};
@@ -712,7 +719,7 @@ async function renderGA(force){ if(!S) return; if(!gaParamsBuilt) buildGaParams(
   M.science.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#ffd84a'; g.beginPath(); g.arc(ox+c*cs+cs/2,oy+r*cs+cs/2,cs*.32,0,7); g.fill(); });
   M.resources.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#5aa9ff'; g.fillRect(ox+c*cs+cs*.25,oy+r*cs+cs*.25,cs*.5,cs*.5); });
   M.refuges.forEach(([r,c])=>{ g.strokeStyle='#52d58e'; g.lineWidth=1.5; g.strokeRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2); });
-  if(M.destination){ g.strokeStyle='#ff4fd8'; g.lineWidth=2; g.beginPath(); g.arc(ox+M.destination[1]*cs+cs/2,oy+M.destination[0]*cs+cs/2,cs*.55,0,7); g.stroke(); }
+  (M.destinations||[]).forEach(([r,c],i)=>{ g.strokeStyle='#ff4fd8'; g.lineWidth=i?1:2; g.beginPath(); g.arc(ox+c*cs+cs/2,oy+r*cs+cs/2,cs*.55,0,7); g.stroke(); });
   const [pr,pc]=S.status.position; g.fillStyle='#5aa9ff'; g.beginPath(); g.arc(ox+pc*cs+cs/2,oy+pr*cs+cs/2,cs*.38,0,7); g.fill();
   // fitness chart
   const [g2,w2,h2]=ctx2d($('gaFit')); const hb=(G.history||[]).map(x=>x.best), hf=(G.history||[]).map(x=>x.best_feasible);

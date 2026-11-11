@@ -144,6 +144,14 @@ Regla: todo evento debe cambiar al menos un valor numérico visible en telemetr�
 - El mensaje de confirmación indica la celda y que el rover debe descubrirlo con sus sensores.
 - **Aceptación:** tras colocar un barranco, la celda queda marcada sin activar "ocultos" y sin dar ningún paso.
 
+### F13 · Varios destinos con el mejor orden de visita
+Agregado el 2026-11-11 a pedido del usuario; amplía F6.
+- El operador puede fijar hasta 8 destinos. Un clic sobre un destino ya fijado lo quita; «Quitar todos» los borra.
+- El orden de visita lo decide un AG de permutaciones (familia viajero) que minimiza las celdas del recorrido completo, incluido el retorno al refugio más cercano. Con la misma semilla da el mismo orden.
+- Criterios: el orden coincide con el óptimo exacto en las pruebas (hasta 7 paradas); el rover pasa por todos los destinos; un destino que se cruza de camino cuenta como visitado; un destino que encarece el recorrido más allá de la batería se rechaza con «no hay retorno seguro».
+- El panel numera los destinos en orden de visita y dibuja el recorrido entre ellos en 2D y 3D.
+- Límite conocido: el orden es óptimo en distancia sobre el mapa creído; cada tramo lo planifica el AG de rutas, que puede desviarse a sitios científicos.
+
 ### F1 · Viaje entre planetas
 - Al elegir un planeta distinto y válido, se muestra una animación de unos 3 segundos sobre el área del mapa: el planeta de origen se aleja, una nave cruza el espacio y aparece el planeta de destino; después se muestra el terreno nuevo.
 - Un clic salta la animación.

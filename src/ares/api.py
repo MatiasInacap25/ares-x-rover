@@ -109,6 +109,7 @@ class Session:
                         science=_r(world.science_progress, 3), link=m.timers['link'] == 0,
                         instruments=len(m.recovered), instruments_total=len(world.resources),
                         destination_distance=(route_cells.index(m.destination) if m.destination in route_cells else None),
+                        destinations_left=len(m.destinations), tour_cells=m.tour_cells,
                         vibration=m.vibration_level, wind=m.wind_speed, heat=m.timers['heat'],
                         link_latency=_r(m.link_latency, 1), queued_orders=m.queued_orders,
                         events_total=sum(m.metrics['events'].values()), events=dict(m.metrics['events']),
@@ -128,6 +129,7 @@ class Session:
                      path=[list(p) for p in m.path], route=[list(p) for p in (m.route or [])],
                      candidates=[c['route'] for c in ga.get('candidates', [])][:3],
                      chosen=ga.get('chosen'), destination=list(m.destination) if m.destination else None,
+                     destinations=[list(d) for d in m.destinations], tour=[list(p) for p in m.destination_tour()],
                      events=[dict(kind=e['kind'], position=e['position']) for e in m.event_log if e.get('position')]),
             telemetry=dict(
                 distance=_r(readings.get('distance')), elevation_delta=_r(readings.get('elevation_delta')),
@@ -225,7 +227,12 @@ class Session:
         return self.snapshot()
 
     def cmd_destination(self, position=None):
-        self.mission.set_destination(position)
+        """Add a destination; the same cell again removes it; no position clears them all."""
+        m = self.mission
+        if position is not None and tuple(int(v) for v in position) in m.destinations:
+            m.remove_destination(position)
+        else:
+            m.set_destination(position)
         return self.snapshot()
 
     def cmd_place(self, position, kind='obstaculo'):
