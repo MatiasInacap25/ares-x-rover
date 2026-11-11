@@ -41,6 +41,7 @@ MAX_STEPS = 400
 INSTRUMENT_BATTERY = 5.   # battery recovered with each instrument cache (supuesto)
 # Event effects (all values are simulation assumptions).
 MAX_DESTINATIONS = 8
+DRONE_AHEAD, DRONE_ENERGY, DRONE_RESERVE = 4, .08, 15.  # cells scouted, % battery per flight, minimum battery
 HEAT_STEPS, HEAT_EXTERNAL, HEAT_INTERNAL, HEAT_ENERGY = 12, 40., 35., 1.2
 WIND_STEPS, WIND_ENERGY, WIND_SPEED = 5, 1.3, 22.
 LINK_STEPS = 10
@@ -80,7 +81,7 @@ def validate_config(config):
     cfg = dict(planet='Marte', mode='rover', seed=42, difficulty='medium', battery=100.,
                policy='hibrido', step_duration=1., science_count=5, thermal_limit=70.,
                weights=None, hidden_cliffs=4, ga_population=30, ga_generations=30,
-               ga_crossover=.85, ga_mutation=.25)
+               ga_crossover=.85, ga_mutation=.25, drone=False)
     cfg.update({k: v for k, v in (config or {}).items() if v is not None})
     if normalize(str(cfg['planet'])) not in PROFILES:
         raise ValueError(f"Planeta desconocido: {cfg['planet']}")
@@ -108,6 +109,9 @@ def validate_config(config):
         if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or not low <= value <= high:
             raise ValueError(f'{key}: debe ser entero entre {low} y {high}')
         cfg[key] = int(value)
+    if not isinstance(cfg['drone'], (bool, np.bool_)):
+        raise ValueError('drone: debe ser verdadero o falso')
+    cfg['drone'] = bool(cfg['drone'])
     if cfg['difficulty'] not in ('low', 'medium', 'high'):
         raise ValueError('Dificultad inválida: low, medium o high')
     if cfg['policy'] not in POLICIES:
@@ -212,7 +216,9 @@ class HybridMission:
         self.metrics = dict(collisions=0, cliffs_avoided=0, hazards_avoided=0, replans=0, ga_runs=0,
                             science_samples=0, safety_violations=0, energy_used=0., distance=0,
                             decision_seconds=0., planning_seconds=0., anomalies=0, contacts=0, events={},
-                            wait_steps=0, degraded_steps=0, link_outage_steps=0)
+                            wait_steps=0, degraded_steps=0, link_outage_steps=0,
+                            drone_steps=0, drone_discoveries=0, drone_energy=0.)
+        self.drone = None  # scout drone state (F16); None when the mission has no drone
 
     # ------------------------------------------------------------------ setup
     def _free_cells(self):
@@ -756,6 +762,56 @@ class HybridMission:
         if self.profile.name == 'Venus':
             self.health = max(0., self.health - .4)  # corrosion (supuesto)
 
+    def _drone_scan(self):
+        """Scout drone: flies the next cells of the route and shares hazards with the rover.
+
+        It only reads what is physically there, never future events. Flight energy is
+        taken from the rover battery; it stays grounded in dust storms, strong wind
+        or below the battery reserve, and does not exist in probe mode.
+        """
+        if not self.config['drone']:
+            return
+        ahead = [tuple(c) for c in (self.route or [])[1:DRONE_AHEAD + 1]]
+        reason = None
+        if self.profile.mode != 'rover':
+            reason = 'La sonda atmosférica no lleva dron.'
+        elif self.timers['storm']:
+            reason = 'En tierra por la tormenta de polvo.'
+        elif self.timers['wind']:
+            reason = 'En tierra por el viento fuerte.'
+        elif self.battery < DRONE_RESERVE:
+            reason = f'En tierra: batería bajo la reserva de {DRONE_RESERVE:.0f} %.'
+        elif not ahead:
+            reason = 'En tierra: no hay ruta que explorar.'
+        if reason:
+            self.drone = dict(position=list(self.position), flying=False, reason=reason, scanned=[], found=[])
+            return
+        world, belief = self.world, self.belief
+        scan = {(r + dr, c + dc) for r, c in ahead for dr in (-1, 0, 1) for dc in (-1, 0, 1)}
+        scan = {cell for cell in scan if world.in_bounds(cell)}
+        cliffs = (world.cliffs & scan) - belief.cliffs
+        obstacles = (world.obstacles & scan) - belief.obstacles
+        found = sorted(cliffs | obstacles)
+        belief.cliffs |= cliffs
+        belief.obstacles |= obstacles
+        self.rna_marks -= cliffs | obstacles  # confirmed by the drone, no longer a revisable belief
+        self.battery = max(0., self.battery - DRONE_ENERGY)
+        self.metrics['drone_steps'] += 1
+        self.metrics['drone_energy'] += DRONE_ENERGY
+        self.metrics['drone_discoveries'] += len(found)
+        self.drone = dict(position=list(ahead[-1]), flying=True, reason=None,
+                          scanned=[list(c) for c in sorted(scan)], found=[list(c) for c in found])
+        if found:
+            blocked = [c for c in found if c in set(tuple(x) for x in self.route)]
+            entry = dict(step=self.step_index, kind='dron', label='Dron explorador',
+                         message=f'El dron detectó {len(cliffs)} barranco(s) y {len(obstacles)} obstáculo(s) adelante'
+                                 + (': la ruta pasaba por ahí y se recalcula.' if blocked else ', fuera de la ruta.'),
+                         position=list(found[0]), cells=[list(c) for c in found])
+            self.event_log.append(entry)
+            self.pending_events.append(entry)
+            if blocked and not self.replan_reason:
+                self.replan_reason = 'DRON_DETECTA_PELIGRO'
+
     # ------------------------------------------------------------------ step
     def step(self):
         if self.finished:
@@ -767,6 +823,7 @@ class HybridMission:
         self._tick_environment()
         if depleted:
             self.battery = 0.
+        self._drone_scan()
         complete = self.position in self.world.refuges and self.step_index > 1 and not self.returning and (
             not (self.belief.science_sites - self.done) or self.nothing_left) and self.destination is None
         if not complete:
@@ -997,6 +1054,7 @@ class HybridMission:
                     events=dict(m['events']), events_total=sum(m['events'].values()),
                     wait_steps=m['wait_steps'], degraded_steps=m['degraded_steps'],
                     anomalies=m['anomalies'], contacts=m['contacts'], link_outage_steps=m['link_outage_steps'],
+                    drone_steps=m['drone_steps'], drone_discoveries=m['drone_discoveries'],
                     replans=m['replans'], ga_runs=m['ga_runs'], safety_violations=m['safety_violations'],
                     decision_ms=round(1000 * m['decision_seconds'] / max(1, self.step_index), 3),
                     planning_s=round(m['planning_seconds'], 3), health=round(self.health, 2))

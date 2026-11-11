@@ -131,6 +131,10 @@ Comandos de verificación:
   - Aceptación: el orden coincide con el óptimo exacto; el rover visita todos; el recorrido completo respeta la batería.
   - Verificado: 14 tests nuevos y prueba en Chrome con 4 destinos. Archivos: `src/ares/genetic.py`, `src/ares/mission.py`, `src/ares/api.py`, `web/index.html`
 
+- [x] **T18 (F16) · Dron explorador** — 8 tests; verificado en Chrome. Archivos: `src/ares/mission.py`, `src/ares/api.py`, `web/index.html`
+- [x] **T19 (F14) · Carrera de fantasmas** — 7 tests; carrera completa verificada en Chrome. Archivos: `src/ares/api.py`, `web/index.html`
+- [x] **T20 (F15) · Repetición con línea de tiempo** — verificado en Chrome (retroceder, avanzar, volver al presente, reiniciar desde la repetición). Archivos: `web/index.html`
+
 ### Punto de control final
 - [ ] Criterios de éxito del spec cumplidos
 - [ ] Preguntar antes de `git push` (publica en producción)

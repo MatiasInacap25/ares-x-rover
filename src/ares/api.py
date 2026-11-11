@@ -17,6 +17,7 @@ from .planet import ASSUMPTION, PROFILES, PlanetProfile
 from .supervisor import REASONS
 
 VERSION = '1.0.0'
+GHOST_POLICIES = ('hibrido', 'sin_rna', 'sin_difuso', 'sin_ag')
 
 
 def _r(value, digits=3):
@@ -74,8 +75,32 @@ def ga_view(ga):
 class Session:
     def __init__(self, **config):
         self.config = validate_config(config)
-        self.mission = HybridMission(**self.config).prepare()
+        self.ghost_mode = False
+        self.ghosts = {}
+        self._start()
         self.comparison = None
+
+    def _start(self):
+        """(Re)create the mission and, in ghost mode, the other policies on the same map and seed."""
+        self.mission = HybridMission(**self.config).prepare()
+        others = [p for p in GHOST_POLICIES if p != self.config['policy']][:3] if self.ghost_mode else []
+        self.ghosts = {p: HybridMission(**dict(self.config, policy=p)).prepare() for p in others}
+
+    def _ghosts_do(self, action):
+        """Mirror an operator action on every ghost; one that cannot take it just skips it."""
+        for ghost in self.ghosts.values():
+            try:
+                action(ghost)
+            except ValueError:
+                pass
+
+    def ghost_view(self):
+        return [dict(policy=policy, label=POLICIES[policy]['label'], position=list(g.position),
+                     path=[list(p) for p in g.path], step=g.step_index, state=g.state, finished=g.finished,
+                     outcome=g.outcome, battery=_r(g.battery, 1), health=_r(g.health, 1),
+                     science=_r(g.world.science_progress, 3), distance=g.metrics['distance'],
+                     collisions=g.metrics['collisions'], replans=g.metrics['replans'])
+                for policy, g in self.ghosts.items()]
 
     # ---------------------------------------------------------------- views
     def snapshot(self):
@@ -161,6 +186,7 @@ class Session:
                     training_samples=perception.report_['training_samples'],
                     split_maps=perception.report_['split_maps'],
                     train_seconds=_r(getattr(perception, 'train_seconds_', None), 2)),
+            drone=m.drone, ghosts=self.ghost_view(),
             comparison=self.comparison))
 
     def meta(self):
@@ -199,7 +225,7 @@ class Session:
         merged.update(config)
         config = validate_config(merged)  # raises readable ValueError (CA-07, NaN sliders)
         self.config = config
-        self.mission = HybridMission(**config).prepare()
+        self._start()
         return self.snapshot()
 
     def cmd_validate(self, **config):
@@ -209,7 +235,15 @@ class Session:
         return {'ok': True}
 
     def cmd_reset(self):
-        self.mission = HybridMission(**self.config).prepare()
+        self._start()
+        return self.snapshot()
+
+    def cmd_ghosts(self, enabled=True):
+        """Ghost race on or off. Runners must start together, so the mission restarts."""
+        if not isinstance(enabled, bool):
+            raise ValueError('enabled: debe ser verdadero o falso')
+        self.ghost_mode = enabled
+        self._start()
         return self.snapshot()
 
     def cmd_step(self, n=1):
@@ -217,13 +251,16 @@ class Session:
         if not 1 <= n <= 400:
             raise ValueError('Pasos inválidos (1–400)')
         for _ in range(n):
-            if self.mission.finished:
+            if self.mission.finished and all(g.finished for g in self.ghosts.values()):
                 break
-            self.mission.step()
+            for runner in [self.mission, *self.ghosts.values()]:
+                if not runner.finished:
+                    runner.step()
         return self.snapshot()
 
     def cmd_inject(self, kind, **data):
         self.mission.inject(kind, **data)
+        self._ghosts_do(lambda ghost: ghost.inject(kind, **data))
         return self.snapshot()
 
     def cmd_destination(self, position=None):
@@ -231,13 +268,20 @@ class Session:
         m = self.mission
         if position is not None and tuple(int(v) for v in position) in m.destinations:
             m.remove_destination(position)
+            self._ghosts_do(lambda ghost: ghost.remove_destination(position))
         else:
             m.set_destination(position)
+            self._ghosts_do(lambda ghost: ghost.set_destination(position))
         return self.snapshot()
 
     def cmd_place(self, position, kind='obstaculo'):
         """Operator edits the real terrain (RF-02); the rover must discover it."""
-        m = self.mission
+        self._place(self.mission, position, kind)
+        self._ghosts_do(lambda ghost: self._place(ghost, position, kind))
+        return self.snapshot()
+
+    @staticmethod
+    def _place(m, position, kind):
         cell = tuple(int(v) for v in position)
         if not m.world.in_bounds(cell):
             raise ValueError('Celda fuera del mapa')
@@ -260,7 +304,6 @@ class Session:
             m.belief.cliffs.discard(cell)
         else:
             raise ValueError('Tipo de celda desconocido')
-        return self.snapshot()
 
     def cmd_fuzzy_eval(self, distance, battery, slope, temperature=20.):
         controller = FuzzyController()

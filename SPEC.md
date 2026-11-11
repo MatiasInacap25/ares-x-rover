@@ -152,6 +152,24 @@ Agregado el 2026-11-11 a pedido del usuario; amplía F6.
 - El panel numera los destinos en orden de visita y dibuja el recorrido entre ellos en 2D y 3D.
 - Límite conocido: el orden es óptimo en distancia sobre el mapa creído; cada tramo lo planifica el AG de rutas, que puede desviarse a sitios científicos.
 
+### F14 · Carrera de fantasmas (modo activable)
+Agregado el 2026-11-11 a pedido del usuario.
+- Botón «Carrera de fantasmas». Al activarlo la misión se reinicia y las otras políticas (sin RNA, sin difuso, sin AG; el híbrido si el rover usa una ablación) corren el mismo mapa y la misma semilla, paso a paso junto al rover.
+- Los eventos, las ediciones de terreno y los destinos del operador se aplican a todos los corredores.
+- Se dibujan translúcidos con su recorrido en 2D y 3D, y un marcador muestra batería, ciencia y estado. Al terminar todos, se ordena por misión cumplida, ciencia, batería y colisiones.
+- Criterio: con el modo apagado, la traza y el estado son idénticos a los de antes.
+
+### F15 · Repetición con línea de tiempo
+- Barra bajo el mapa con deslizador, paso anterior, paso siguiente y «En vivo». Al retroceder, todo el panel muestra ese paso y una tarjeta explica la decisión: código de motivo, acción, explicación, RNA, velocidad difusa, batería y eventos.
+- Cualquier acción de simulación (paso, iniciar, reiniciar, evento) vuelve al presente.
+- Límite conocido: la historia vive en el navegador; al recargar la página empieza desde el paso actual.
+
+### F16 · Dron explorador
+- Parámetro `drone` (apagado por defecto; con él apagado la traza no cambia). Botón «Dron explorador» en el panel; al cambiarlo la misión se reinicia.
+- Supuestos de simulación: en cada paso revisa las 4 celdas siguientes de la ruta y sus vecinas, y agrega al mapa creído los barrancos y obstáculos reales que ve; si alguno está en la ruta, se replanifica con motivo `DRON_DETECTA_PELIGRO`. Cada vuelo cuesta 0,08 % de batería del rover.
+- Queda en tierra con tormenta de polvo, viento fuerte o batería bajo 15 %. No existe en modo sonda.
+- Criterio: un barranco oculto en la ruta se descubre antes del veto `R04`; 0 violaciones de seguridad. Medido en 20 semillas con 6 barrancos ocultos: pasos 38,3 → 36,7, replanificaciones 4,45 → 3,65, vetos R04 0,55 → 0, batería final 73,9 % → 69,8 %.
+
 ### F1 · Viaje entre planetas
 - Al elegir un planeta distinto y válido, se muestra una animación de unos 3 segundos sobre el área del mapa: el planeta de origen se aleja, una nave cruza el espacio y aparece el planeta de destino; después se muestra el terreno nuevo.
 - Un clic salta la animación.
