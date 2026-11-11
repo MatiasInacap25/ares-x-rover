@@ -663,21 +663,25 @@ function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
   $('pName').textContent=P.name; $('pInfo').innerHTML=`${P.mode==='rover'?'Rover de superficie':'Sonda atmosférica virtual'}<br>g ${fmt(P.gravity,2)} m/s² · ${fmt(P.temperature,0)} °C ref.`; drawPlanetIcon(P.name);
   $('tSub').textContent=`SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')} · ${st.daylight?'día':'noche'}${st.storm?' · tormenta':''}${st.heat?' · ola de calor':''}${st.wind?' · viento':''}`;
   const bat=st.battery, nv=T.nav_valid||{};
+  // a sensor row without a sample says so; it is never classified as nominal or alert (F02)
+  const has=v=>v!==null&&v!==undefined&&!Number.isNaN(v);
+  const sensed=(name,unit,v,val,status,chip)=>has(v)?tl(name,unit,val,status,chip):tl(name,unit,'—','ref','SIN DATOS');
+  const pa=has(T.pressure)&&T.pressure>=1e5;   // the unit label follows the unit of the value (F01)
   $('tele').innerHTML=[
     tl('Batería','% · ciclo solar',fmt(bat,1)+' %',bat<15?'bad':bat<35?'warn':'ok'),
     tl('Integridad','% mecánica',fmt(st.health,0)+' %',st.health<30?'bad':st.health<70?'warn':'ok'),
-    tl('Temp. exterior','°C · sensor',fmt(T.temperature_external,1),'ref','AMBIENTE'),
+    sensed('Temp. exterior','°C · sensor',T.temperature_external,fmt(T.temperature_external,1),'ref','AMBIENTE'),
     tl('Temp. componentes','°C · interna',fmt(st.temperature_internal,1),st.temperature_internal>60?'bad':st.temperature_internal>45?'warn':'ok',st.heat?`CALOR ${st.heat}`:null),
-    tl('O₂ exterior (ambiental)','% vol. · no respiración',fmt(T.oxygen_ambient,2),'ref'),
-    tl('O₂ almacenado','% · experimentos',fmt(T.oxygen_stored,0),'ok'),
-    tl('Presión','Pa · referencia',T.pressure!==null&&T.pressure!==undefined?(T.pressure>=1e5?(T.pressure/1e5).toFixed(1)+' bar':Math.round(T.pressure)):'—','ref'),
+    sensed('O₂ exterior (ambiental)','% vol. · no respiración',T.oxygen_ambient,fmt(T.oxygen_ambient,2),'ref'),
+    sensed('O₂ almacenado','% · experimentos',T.oxygen_stored,fmt(T.oxygen_stored,0),'ok'),
+    sensed('Presión',(pa?'bar':'Pa')+' · referencia',T.pressure,pa?(T.pressure/1e5).toFixed(1)+' bar':Math.round(T.pressure),'ref'),
     tl('Gravedad','m/s²',fmt(P.gravity,2),'ref'),
-    tl('Radiación (índice)','mSv/h simulado',fmt(T.radiation,2),'ok'),
-    tl('Pendiente','° inclinómetro',fmt(T.slope,1),T.slope>30?'bad':T.slope>15?'warn':'ok'),
-    tl('Proximidad','m · frontal',nv.proximidad===false?'NaN':fmt(T.distance,2),nv.proximidad===false?'bad':'ok',nv.proximidad===false?'FALLA':null),
-    tl('LIDAR / borde','Δ elevación m',nv.lidar===false?'NaN':fmt(T.elevation_delta,1),nv.lidar===false?'bad':T.edge_cliff?'bad':'ok',nv.lidar===false?'FALLA':T.edge_cliff?'BARRANCO':null),
+    sensed('Radiación (índice)','mSv/h simulado',T.radiation,fmt(T.radiation,2),'ok'),
+    sensed('Pendiente','° inclinómetro',T.slope,fmt(T.slope,1),T.slope>30?'bad':T.slope>15?'warn':'ok'),
+    nv.proximidad===false?tl('Proximidad','m · frontal','NaN','bad','FALLA'):sensed('Proximidad','m · frontal',T.distance,fmt(T.distance,2),'ok'),   // a confirmed sensor failure stays apart
+    nv.lidar===false?tl('LIDAR / borde','Δ elevación m','NaN','bad','FALLA'):sensed('LIDAR / borde','Δ elevación m',T.elevation_delta,fmt(T.elevation_delta,1),T.edge_cliff?'bad':'ok',T.edge_cliff?'BARRANCO':null),
     tl('Visibilidad','0–1 · partículas',fmt(st.visibility,2),st.visibility<.4?'bad':st.visibility<.8?'warn':'ok'),
-    tl('Potencia solar','W simulados',fmt(T.solar_power,1),T.solar_power<1?'warn':'ok'),
+    sensed('Potencia solar','W simulados',T.solar_power,fmt(T.solar_power,1),T.solar_power<1?'warn':'ok'),
     tl('Enlace','latencia s · órdenes en cola',st.link?'OK':`${fmt(st.link_latency,0)} s · ${st.queued_orders}`,st.link?'ok':'warn',st.link?null:'AUTÓNOMO'),
     tl('Vibración','m/s² · sismómetro',fmt(st.vibration,1),st.vibration>0?'warn':'ok'),
     tl('Viento','m/s · consumo +30 %',fmt(st.wind,0),st.wind>0?'warn':'ok'),
