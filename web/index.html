@@ -700,17 +700,22 @@ function renderTop(){ const st=S.status; $('bGhost').classList.toggle('on',(S.gh
 // ------------------------------------------------------------ D · neural network
 const FEAT_LBL={distance:'Distancia',slope:'Pendiente',elevation_delta:'Δ elevación',texture:'Textura',visibility:'Visibilidad',vibration:'Vibración'};
 let nnMode='live', nnTest=null;
-function buildFeat(){ $('nnFeat').innerHTML=META.features.map(f=>`<div><label title="${FEAT_LBL[f]}">${FEAT_LBL[f]}</label><input type="number" step="0.1" id="nf_${f}" value="${{distance:10,visibility:1,texture:.25}[f]??0}"></div>`).join('');
+const NN_DEFAULTS={distance:10,visibility:1,texture:.25};
+let nnTestInputs=null; // last values evaluated in Prueba mode, kept apart from the live mission inference
+function buildFeat(){ nnTestInputs=Object.fromEntries(META.features.map(f=>[f,NN_DEFAULTS[f]??0]));
+  $('nnFeat').innerHTML=META.features.map(f=>`<div><label title="${FEAT_LBL[f]}">${FEAT_LBL[f]}</label><input type="number" step="0.1" id="nf_${f}" value="${nnTestInputs[f]}"></div>`).join('');
   META.features.forEach(f=>$('nf_'+f).addEventListener('input',()=>{ setNN('test'); nnEvalSoon(); })); }
-let nnT=null; function nnEvalSoon(){ clearTimeout(nnT); nnT=setTimeout(async()=>{ const a={}; META.features.forEach(f=>a[f]=+$('nf_'+f).value); const o=await api('rna_eval',a); if(o.error){ msg(o.error,true); return; } nnTest=o; renderNN(); },120); }
-function setNN(m){ nnMode=m; document.querySelectorAll('[data-nn]').forEach(b=>b.classList.toggle('on',b.dataset.nn===m)); if(m==='test'&&!nnTest) nnEvalSoon(); renderNN(); }
+let nnT=null; function nnEvalSoon(){ clearTimeout(nnT); nnT=setTimeout(async()=>{ const a={}; META.features.forEach(f=>a[f]=+$('nf_'+f).value); nnTestInputs={...a}; const o=await api('rna_eval',a); if(o.error){ msg(o.error,true); return; } nnTest=o; renderNN(); },120); }
+function setNN(m){ if(m==='test') META.features.forEach(f=>{ const el=$('nf_'+f); if(el.value==='') el.value=nnTestInputs[f]; }); // a blank live field starts from the last Prueba value
+  nnMode=m; document.querySelectorAll('[data-nn]').forEach(b=>b.classList.toggle('on',b.dataset.nn===m)); if(m==='test'&&!nnTest) nnEvalSoon(); renderNN(); }
 document.querySelectorAll('[data-nn]').forEach(b=>b.addEventListener('click',()=>setNN(b.dataset.nn)));
 function forward(x){ const N=META.network; const acts=[x]; let a=x; N.coefs.forEach((W,li)=>{ const b=N.intercepts[li]; const out=b.map((bj,j)=>{ let s=bj; for(let i=0;i<a.length;i++) s+=a[i]*W[i][j]; return s; });
   a=li<N.coefs.length-1?out.map(v=>Math.max(0,v)):(()=>{ const m=Math.max(...out), e=out.map(v=>Math.exp(v-m)), s=e.reduce((p,q)=>p+q,0); return e.map(v=>v/s); })(); acts.push(a); }); return acts; }
 function renderNN(){ if(!META||!S) return; const src=nnMode==='test'?nnTest:S.rna;
   const t=S.nn.test; $('nnSub').textContent=`${META.network.layers.join('-')} · acc ${fmt(t.accuracy,3)}`;
   $('nnMetrics').innerHTML=`exactitud ${fmt(t.accuracy,3)} · baseline ${fmt(t.majority_baseline,3)} · macro-F1 ${fmt(t.macro_f1,3)}<br>recall barranco ${fmt(t.barranco_recall,3)} · ECE ${fmt(t.calibration_error,3)} · n=${t.samples}`;
-  if(nnMode==='live'&&S.rna){ META.features.forEach(f=>{ const el=$('nf_'+f); if(document.activeElement!==el) el.value=fmt(S.rna.features[f],2); }); }
+  if(nnMode==='live') META.features.forEach(f=>{ const el=$('nf_'+f); if(document.activeElement===el) return; // no prediction: blank fields, never stale readings
+    el.value=S.rna?fmt(S.rna.features[f],2):''; el.placeholder=S.rna?'':'—'; el.title=S.rna?'':'Sin predicción vigente: ejecute un paso o escriba un valor para usar el modo Prueba'; });
   $('nnCell').textContent=nnMode==='test'?'(modo prueba: edite valores)':S.rna?`(${S.rna.cell})`:'';
   const c=$('nnNet'), [g,w,h]=ctx2d(c); const N=META.network; const L=N.layers;
   const x=src&&src.normalized?src.normalized:null; const acts=x?forward(x):null;
