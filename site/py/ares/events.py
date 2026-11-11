@@ -2,8 +2,8 @@
 from dataclasses import dataclass, field
 from .planet import normalize
 
-EVENTS = ('barranco', 'bateria_baja', 'dia', 'noche', 'sismo', 'meteorito', 'tormenta_polvo', 'corrosion', 'biosenal_anomala', 'alienigena', 'falla_sensor', 'perdida_enlace', 'viento')
-ALIASES = {'low_battery': 'bateria_baja', 'day': 'dia', 'night': 'noche', 'quake': 'sismo', 'dust_storm': 'tormenta_polvo', 'sensor_failure': 'falla_sensor', 'link_loss': 'perdida_enlace', 'wind': 'viento'}
+EVENTS = ('barranco', 'bateria_baja', 'dia', 'noche', 'sismo', 'meteorito', 'tormenta_polvo', 'corrosion', 'biosenal_anomala', 'alienigena', 'falla_sensor', 'perdida_enlace', 'viento', 'ola_calor')
+ALIASES = {'low_battery': 'bateria_baja', 'day': 'dia', 'night': 'noche', 'quake': 'sismo', 'dust_storm': 'tormenta_polvo', 'sensor_failure': 'falla_sensor', 'link_loss': 'perdida_enlace', 'wind': 'viento', 'heat_wave': 'ola_calor'}
 
 
 @dataclass
@@ -47,5 +47,6 @@ class Event:
         return {'kind': self.kind, 'message': {
             'biosenal_anomala': 'Bioseñal anómala simulada; no confirma vida.',
             'alienigena': 'Evento narrativo completamente ficticio; evitar objeto.',
-            'viento': 'Viento simulado; límites específicos del modo sonda.',
+            'viento': 'Ráfaga de viento simulada: mayor consumo durante 5 pasos.',
+            'ola_calor': 'Ola de calor simulada: +40 °C exterior, +35 °C en componentes y +20 % de consumo durante 12 pasos.',
         }.get(self.kind, 'Evento aplicado: ' + self.kind)}

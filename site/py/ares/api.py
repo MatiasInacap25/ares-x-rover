@@ -17,6 +17,7 @@ from .planet import ASSUMPTION, PROFILES, PlanetProfile
 from .supervisor import REASONS
 
 VERSION = '1.0.0'
+GHOST_POLICIES = ('hibrido', 'sin_rna', 'sin_difuso', 'sin_ag')
 
 
 def _r(value, digits=3):
@@ -74,8 +75,32 @@ def ga_view(ga):
 class Session:
     def __init__(self, **config):
         self.config = validate_config(config)
-        self.mission = HybridMission(**self.config).prepare()
+        self.ghost_mode = False
+        self.ghosts = {}
+        self._start()
         self.comparison = None
+
+    def _start(self):
+        """(Re)create the mission and, in ghost mode, the other policies on the same map and seed."""
+        self.mission = HybridMission(**self.config).prepare()
+        others = [p for p in GHOST_POLICIES if p != self.config['policy']][:3] if self.ghost_mode else []
+        self.ghosts = {p: HybridMission(**dict(self.config, policy=p)).prepare() for p in others}
+
+    def _ghosts_do(self, action):
+        """Mirror an operator action on every ghost; one that cannot take it just skips it."""
+        for ghost in self.ghosts.values():
+            try:
+                action(ghost)
+            except ValueError:
+                pass
+
+    def ghost_view(self):
+        return [dict(policy=policy, label=POLICIES[policy]['label'], position=list(g.position),
+                     path=[list(p) for p in g.path], step=g.step_index, state=g.state, finished=g.finished,
+                     outcome=g.outcome, battery=_r(g.battery, 1), health=_r(g.health, 1),
+                     science=_r(g.world.science_progress, 3), distance=g.metrics['distance'],
+                     collisions=g.metrics['collisions'], replans=g.metrics['replans'])
+                for policy, g in self.ghosts.items()]
 
     # ---------------------------------------------------------------- views
     def snapshot(self):
@@ -84,6 +109,7 @@ class Session:
         hidden_obstacles = world.obstacles - belief.obstacles
         hidden_cliffs = world.cliffs - belief.cliffs
         ga = m.ga or {}
+        route_cells = [tuple(c) for c in (m.route or [])]
         last = m.last
         trace = m.logger.trace
         perception = m.perception
@@ -107,6 +133,13 @@ class Session:
                         daylight=m.daylight, visibility=m.visibility, returning=m.returning,
                         science=_r(world.science_progress, 3), link=m.timers['link'] == 0,
                         instruments=len(m.recovered), instruments_total=len(world.resources),
+                        destination_distance=(route_cells.index(m.destination) if m.destination in route_cells else None),
+                        destinations_left=len(m.destinations), tour_cells=m.tour_cells,
+                        vibration=m.vibration_level, wind=m.wind_speed, heat=m.timers['heat'],
+                        link_latency=_r(m.link_latency, 1), queued_orders=m.queued_orders,
+                        events_total=sum(m.metrics['events'].values()), events=dict(m.metrics['events']),
+                        anomalies=m.metrics['anomalies'], contacts=m.metrics['contacts'],
+                        wait_steps=m.metrics['wait_steps'], degraded_steps=m.metrics['degraded_steps'],
                         storm=m.timers['storm'], quake=m.wait_steps,
                         sensor_failures=sorted(m.sensors.failures),
                         temperature_internal=_r(m.temperature_internal, 1)),
@@ -120,7 +153,8 @@ class Session:
                      risk=[[int(r), int(c), _r(v, 2)] for (r, c), v in sorted(m.risk.items()) if v >= .15],
                      path=[list(p) for p in m.path], route=[list(p) for p in (m.route or [])],
                      candidates=[c['route'] for c in ga.get('candidates', [])][:3],
-                     chosen=ga.get('chosen'),
+                     chosen=ga.get('chosen'), destination=list(m.destination) if m.destination else None,
+                     destinations=[list(d) for d in m.destinations], tour=[list(p) for p in m.destination_tour()],
                      events=[dict(kind=e['kind'], position=e['position']) for e in m.event_log if e.get('position')]),
             telemetry=dict(
                 distance=_r(readings.get('distance')), elevation_delta=_r(readings.get('elevation_delta')),
@@ -152,6 +186,10 @@ class Session:
                     training_samples=perception.report_['training_samples'],
                     split_maps=perception.report_['split_maps'],
                     train_seconds=_r(getattr(perception, 'train_seconds_', None), 2)),
+            drone=m.drone, ghosts=self.ghost_view(),
+            event_feed=dict(total=len(m.event_log),
+                            recent=[dict(step=e['step'], kind=e['kind'], label=e['label'], message=e.get('message') or '')
+                                    for e in m.event_log[-12:]]),
             comparison=self.comparison))
 
     def meta(self):
@@ -190,7 +228,7 @@ class Session:
         merged.update(config)
         config = validate_config(merged)  # raises readable ValueError (CA-07, NaN sliders)
         self.config = config
-        self.mission = HybridMission(**config).prepare()
+        self._start()
         return self.snapshot()
 
     def cmd_validate(self, **config):
@@ -200,7 +238,15 @@ class Session:
         return {'ok': True}
 
     def cmd_reset(self):
-        self.mission = HybridMission(**self.config).prepare()
+        self._start()
+        return self.snapshot()
+
+    def cmd_ghosts(self, enabled=True):
+        """Ghost race on or off. Runners must start together, so the mission restarts."""
+        if not isinstance(enabled, bool):
+            raise ValueError('enabled: debe ser verdadero o falso')
+        self.ghost_mode = enabled
+        self._start()
         return self.snapshot()
 
     def cmd_step(self, n=1):
@@ -208,18 +254,37 @@ class Session:
         if not 1 <= n <= 400:
             raise ValueError('Pasos inválidos (1–400)')
         for _ in range(n):
-            if self.mission.finished:
+            if self.mission.finished and all(g.finished for g in self.ghosts.values()):
                 break
-            self.mission.step()
+            for runner in [self.mission, *self.ghosts.values()]:
+                if not runner.finished:
+                    runner.step()
         return self.snapshot()
 
     def cmd_inject(self, kind, **data):
         self.mission.inject(kind, **data)
+        self._ghosts_do(lambda ghost: ghost.inject(kind, **data))
+        return self.snapshot()
+
+    def cmd_destination(self, position=None):
+        """Add a destination; the same cell again removes it; no position clears them all."""
+        m = self.mission
+        if position is not None and tuple(int(v) for v in position) in m.destinations:
+            m.remove_destination(position)
+            self._ghosts_do(lambda ghost: ghost.remove_destination(position))
+        else:
+            m.set_destination(position)
+            self._ghosts_do(lambda ghost: ghost.set_destination(position))
         return self.snapshot()
 
     def cmd_place(self, position, kind='obstaculo'):
         """Operator edits the real terrain (RF-02); the rover must discover it."""
-        m = self.mission
+        self._place(self.mission, position, kind)
+        self._ghosts_do(lambda ghost: self._place(ghost, position, kind))
+        return self.snapshot()
+
+    @staticmethod
+    def _place(m, position, kind):
         cell = tuple(int(v) for v in position)
         if not m.world.in_bounds(cell):
             raise ValueError('Celda fuera del mapa')
@@ -242,7 +307,6 @@ class Session:
             m.belief.cliffs.discard(cell)
         else:
             raise ValueError('Tipo de celda desconocido')
-        return self.snapshot()
 
     def cmd_fuzzy_eval(self, distance, battery, slope, temperature=20.):
         controller = FuzzyController()

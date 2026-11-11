@@ -57,13 +57,37 @@ input[type=range]{width:100%;accent-color:var(--amber);margin:0;height:14px}
 #ovTop b{font:700 13px var(--head);letter-spacing:.1em;color:var(--accent)}
 #ovCam{right:8px;top:8px;display:flex;gap:3px;padding:3px}
 #ovCam .btn{padding:2px 7px;font-size:10.5px}
-#ovState{left:8px;bottom:8px;padding:7px 10px;max-width:min(470px,60%)}
+#ovCam .seg button{padding:3px 9px;font-weight:600}
+#map2d{position:absolute;inset:0;width:100%;height:100%;display:none;cursor:crosshair;background:#0d0906}
+#view.picking #scene,#view.picking #map2d{cursor:crosshair}
+#ovState{left:8px;bottom:38px;padding:7px 10px;max-width:min(470px,60%)}
 #ovState .st{font:700 17px var(--head);letter-spacing:.12em}
 #ovState .ex{font-size:11px;color:var(--muted);margin-top:2px}
-#ovLegend{right:8px;bottom:8px;padding:6px 9px;display:grid;grid-template-columns:repeat(3,auto);gap:3px 11px;font-size:10px;color:var(--muted)}
+#ovLegend{right:8px;bottom:38px;padding:6px 9px;display:grid;grid-template-columns:repeat(3,auto);gap:3px 11px;font-size:10px;color:var(--muted)}
 #ovLegend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .st-EXPLORACION{color:var(--ok)}.st-ALERTA,.st-REPLANIFICACION{color:var(--warn)}.st-REFUGIO{color:var(--blue)}
 .st-MODO_SEGURO,.st-FRACASO{color:var(--bad)}.st-EXITO{color:var(--ok)}.st-CONFIGURACION{color:var(--muted)}
+#alerts{position:absolute;z-index:6;top:44px;left:50%;transform:translateX(-50%);width:min(390px,38%);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.alert{pointer-events:auto;display:flex;gap:8px;align-items:flex-start;padding:6px 8px 6px 10px;border-radius:5px;border:1px solid var(--line2);border-left:4px solid var(--blue);background:rgba(14,9,6,.9);backdrop-filter:blur(3px);font-size:11px;line-height:1.35;animation:alertIn .22s ease-out}
+.alert b{display:block;font:700 12px var(--head);letter-spacing:.07em;text-transform:uppercase}
+.alert.warn{border-left-color:var(--warn)}.alert.warn b{color:var(--warn)}
+.alert.crit{border-left-color:var(--bad);border-color:var(--bad)}.alert.crit b{color:var(--bad)}
+.alert.ok{border-left-color:var(--ok)}.alert.ok b{color:var(--ok)}
+.alert div{flex:1;min-width:0}.alert button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+@keyframes alertIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.alert{animation:none}}
+#ovTime{left:8px;right:8px;bottom:6px;display:flex;gap:6px;align-items:center;padding:2px 8px;font:600 10.5px var(--mono)}
+#ovTime input{flex:1;min-width:60px;margin:0}
+#ovTime .btn{padding:1px 8px;font-size:10.5px}
+#ovTime.replay{border-color:var(--accent)}
+#ovWhy{left:8px;top:44px;max-width:min(340px,46%);padding:7px 10px;font-size:11px;line-height:1.45;border-color:var(--accent);display:none}
+#ovWhy b{color:var(--accent);font:700 12px var(--head);letter-spacing:.08em}
+#ovRace{right:8px;top:44px;padding:6px 9px;font-size:10.5px;display:none}
+#ovRace .rh{font:700 11px var(--head);letter-spacing:.1em;color:var(--accent);margin-bottom:3px;text-transform:uppercase}
+#ovRace .rr{display:grid;grid-template-columns:10px minmax(80px,auto) 36px 36px auto;gap:6px;align-items:center;padding:1px 0}
+#ovRace .rr i{width:9px;height:9px;border-radius:50%;display:inline-block}
+#ovRace .rr span{color:var(--muted);text-align:right}
+#travel{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:30;cursor:pointer;background:#03040a}
 #nogl{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted)}
 /* right */
 .pbtn{font:600 11px var(--head);letter-spacing:.08em;text-transform:uppercase;text-align:center;padding:5px 2px}
@@ -112,17 +136,23 @@ canvas.fill{display:block;width:100%}
   </section>
 
   <section class="panel" id="view">
-   <canvas id="scene"></canvas><div id="nogl">WebGL no disponible en este navegador.</div>
+   <canvas id="scene"></canvas><canvas id="map2d"></canvas><canvas id="travel" title="Clic para saltar la animación"></canvas><div id="nogl">WebGL no disponible en este navegador.</div>
    <div class="ov" id="ovTop"><b>ARES-X 3D</b><span id="oPlanet">—</span><span id="oStep">—</span><span id="oPolicy" class="small">—</span></div>
    <div class="ov" id="ovCam">
+     <span class="seg" title="Cambiar la vista del mapa"><button class="on" data-view="3d">3D</button><button data-view="2d">2D</button></span>
      <button class="btn c on" data-cam="follow">Seguir rover</button><button class="btn c" data-cam="orbit">Vista general</button><button class="btn c" data-cam="top">Cenital</button>
      <label class="btn c" title="Muestra peligros que el rover aún no descubrió"><input type="checkbox" id="fReveal" style="vertical-align:-2px;margin:0 3px 0 0">ocultos</label>
    </div>
    <div class="ov" id="ovState"><div class="st" id="sState">EN ESPERA</div><div class="ex" id="sExpl">Configure la misión y presione Iniciar.</div></div>
+   <div id="alerts" role="status" aria-live="polite"></div>
+   <div class="ov" id="ovWhy"></div>
+   <div class="ov" id="ovRace" title="Al terminar se ordena por: misión cumplida, ciencia, batería restante y colisiones"></div>
+   <div class="ov" id="ovTime"><button class="btn c" id="tPrev" title="Paso anterior">◀</button><input type="range" id="tSlider" min="0" max="0" value="0" title="Línea de tiempo: arrastre para repetir la misión"><button class="btn c" id="tNext" title="Paso siguiente">▶</button><span id="tLabel">paso 0/0</span><button class="btn c on" id="tLive" title="Volver al presente">● En vivo</button></div>
    <div class="ov" id="ovLegend">
      <span><i style="background:#52d58e"></i>Despejado</span><span><i style="background:#ffc04d"></i>Obstáculo</span><span><i style="background:#e8e05a"></i>Pendiente</span>
      <span><i style="background:#ff5a4f"></i>Barranco</span><span><i style="background:#5aa9ff"></i>Turbulencia</span><span><i style="background:#d07bff"></i>Impacto</span>
      <span><i style="background:#ff9a3c"></i>Riesgo RNA</span><span><i style="background:#ffd84a;height:3px"></i>Ruta AG</span><span><i style="background:#5aa9ff;height:3px"></i>Recorrido</span>
+     <span><i style="background:#ff4fd8"></i>Destino</span><span><i style="background:#fff;border-radius:50%"></i>Edición operador</span><span><i style="background:#22d3ee"></i>Dron</span>
    </div>
   </section>
 
@@ -143,10 +173,14 @@ canvas.fill{display:block;width:100%}
     <button class="btn c" id="bApply" style="width:100%;margin-top:4px">Aplicar configuración</button>
     <div class="lbl">Simulación</div>
     <div class="g3"><button class="btn go" id="bRun">▶ Iniciar</button><button class="btn c" id="bStep">Paso</button><button class="btn c" id="bReset">Reiniciar</button></div>
-    <div class="sl" style="margin-top:4px">Velocidad<span id="lSpeed">1×</span><input id="fSpeed" type="range" min="1" max="6" step="1" value="1"></div>
+    <div class="g2" style="margin-top:4px"><button class="btn c" id="bGhost" title="Las otras políticas corren el mismo mapa y semilla al mismo tiempo">Carrera de fantasmas</button><button class="btn c" id="bDrone" title="Un dron vuela adelante y comparte los peligros que ve">Dron explorador</button></div>
+    <div class="sl" style="margin-top:4px">Velocidad del modo automático<span id="lSpeed">×1</span><input id="fSpeed" type="range" min="0" max="5" step="1" value="2"></div>
     <div class="lbl">Motor de eventos</div>
     <div class="g2" id="events"></div>
-    <div class="lbl">Editar terreno real (clic en 3D)</div>
+    <div class="lbl">Destinos del rover</div>
+    <div class="g2"><button class="btn c" id="bDest">◎ Agregar destinos</button><button class="btn c" id="bDestClear">Quitar todos</button></div>
+    <div class="small" id="destInfo" style="margin-top:3px"></div>
+    <div class="lbl">Editar terreno real (clic en el mapa)</div>
     <select id="fTool"><option value="">Sin edición</option><option value="obstaculo">Colocar obstáculo</option><option value="barranco">Colocar barranco</option><option value="limpiar">Limpiar celda</option></select>
     <div class="lbl">Exportar</div>
     <div class="g3"><button class="btn c" data-export="csv">Traza CSV</button><button class="btn c" data-export="json">Misión JSON</button><button class="btn c" data-export="comparison_csv">Comparación</button></div>
@@ -272,7 +306,7 @@ let S=null, META=null, running=false, busy=false;
 function msg(t,err){ const m=$('msg'); m.textContent=t; m.className='msg'+(err?' err':''); }
 async function call(fn,args){
   if (busy && fn==='step') return null; busy=true;
-  try{ const out=await api(fn,args); if(out&&out.error){ msg(out.error,true); return null; } if(out&&out.status){ S=out; render(); } return out; }
+  try{ const out=await api(fn,args); if(out&&out.error){ msg(out.error,true); return null; } if(out&&out.status){ notify(out,S); recordFrame(out); S=out; render(); } return out; }
   catch(e){ msg('Error de comunicación con el motor Python: '+e,true); running=false; syncRun(); return null; }
   finally{ busy=false; }
 }
@@ -332,21 +366,24 @@ function elevAt(x,z){ // world -> interpolated elevation (meters) from the map g
   const out=Math.max(0,Math.max(Math.abs(c-cc),Math.abs(r-rr))); // distance outside the map (cells)
   return {e, out};
 }
+const PLANET_R=95; // visual radius of the planet cap: the ground falls away towards the horizon
+const curveAt=(x,z)=>-(x*x+z*z)/(2*PLANET_R);
 function heightAt(x,z){ const {e,out}=elevAt(x,z); const gas=PLANETS[S.planet.name]&&PLANETS[S.planet.name].gas;
-  if(gas) return Math.sin(x*.35+z*.2)*.35+fbm(x*.15,z*.15)*.8;
-  const drop=Math.min(0,e)*.38; // cliffs: deep depressions
-  return Math.max(-4.2,e*.42+drop)+fbm(x*.22+3,z*.22)*1.1+out*out*.18+fbm(x*.05,z*.05)*out*1.6; }
+  if(gas) return curveAt(x,z)+Math.sin(x*.35+z*.2)*.3+fbm(x*.15,z*.15)*.6;
+  const fade=Math.max(0,1-out*.3);  // relief fades outside the grid: no raised rim
+  const drop=Math.min(0,e)*.38;     // cliffs: deep depressions
+  return curveAt(x,z)+Math.max(-4.2,e*.3+drop)*fade+(fbm(x*.22+3,z*.22)-.5)*.7; }
 function buildTerrain(){
   const M=S.map, P=PLANETS[S.planet.name]||PLANETS.Marte;
   V.static.traverse(o=>{ if(o.geometry) o.geometry.dispose(); });
   V.static.clear();
-  const W=M.width*CS+26, H=M.height*CS+26, seg=Math.round(W*2.6);
-  const geo=new THREE.PlaneGeometry(W,H,seg,Math.round(H*2.6)); geo.rotateX(-Math.PI/2);
+  const W=M.width*CS+110, H=M.height*CS+110, seg=Math.round(W*2.2);
+  const geo=new THREE.PlaneGeometry(W,H,seg,Math.round(H*2.2)); geo.rotateX(-Math.PI/2);
   const pos=geo.attributes.position, col=new Float32Array(pos.count*3);
   const ca=new THREE.Color(P.ground[0]), cb=new THREE.Color(P.ground[1]), tmp=new THREE.Color();
-  for(let i=0;i<pos.count;i++){ const x=pos.getX(i), z=pos.getZ(i); const y=heightAt(x,z); pos.setY(i,y);
-    const t=Math.max(0,Math.min(1,.55+y*.12+(fbm(x*.9,z*.9)-.5)*.5)); tmp.copy(cb).lerp(ca,t);
-    if(!P.gas && y<-1.2){ tmp.lerp(new THREE.Color(0x3a1a10),Math.min(.7,(-y-1.2)*.35)); }
+  for(let i=0;i<pos.count;i++){ const x=pos.getX(i), z=pos.getZ(i); const y=heightAt(x,z); pos.setY(i,y); const rel=y-curveAt(x,z); // relief without the planet curvature
+    const t=Math.max(0,Math.min(1,.55+rel*.12+(fbm(x*.9,z*.9)-.5)*.5)); tmp.copy(cb).lerp(ca,t);
+    if(!P.gas && rel<-1.2){ tmp.lerp(new THREE.Color(0x3a1a10),Math.min(.7,(-rel-1.2)*.35)); }
     if(P.gas){ const band=Math.sin(z*.55)*.5+.5; tmp.lerp(new THREE.Color(0xffffff),band*.12); }
     col[i*3]=tmp.r; col[i*3+1]=tmp.g; col[i*3+2]=tmp.b; }
   geo.setAttribute('color',new THREE.BufferAttribute(col,3)); geo.computeVertexNormals();
@@ -355,7 +392,7 @@ function buildTerrain(){
   // decorative pebbles
   if(!P.gas){ const rg=new THREE.DodecahedronGeometry(.18,0), rm=new THREE.MeshStandardMaterial({color:P.ground[1],roughness:1,flatShading:true});
     const n=420, inst=new THREE.InstancedMesh(rg,rm,n), m4=new THREE.Matrix4(), q=new THREE.Quaternion(), s=new THREE.Vector3();
-    for(let i=0;i<n;i++){ const x=(hash2(i,S.config.seed)-.5)*W*.92, z=(hash2(S.config.seed,i*1.7)-.5)*H*.92; const k=.4+hash2(i*3.1,7)*1.6;
+    for(let i=0;i<n;i++){ const x=(hash2(i,S.config.seed)-.5)*(M.width*CS+44), z=(hash2(S.config.seed,i*1.7)-.5)*(M.height*CS+44); const k=.4+hash2(i*3.1,7)*1.6;
       q.setFromEuler(new THREE.Euler(hash2(i,1)*3,hash2(i,2)*3,0)); s.set(k,k*.7,k); m4.compose(new THREE.Vector3(x,heightAt(x,z)+.05,z),q,s); inst.setMatrixAt(i,m4); }
     inst.castShadow=true; V.static.add(inst); }
   V.scene.background=new THREE.Color(P.sky); V.scene.fog=new THREE.FogExp2(P.fog,P.fogD);
@@ -392,7 +429,19 @@ function buildDynamic(){
   if(!gas) for(let r=0;r<M.height;r++) for(let c=0;c<M.width;c++){ const e=M.elevation[r][c]; let d=0;
     [[0,1],[1,0]].forEach(([dr,dc])=>{ if(r+dr<M.height&&c+dc<M.width){ const o=M.elevation[r+dr][c+dc]; if(o>-5&&e>-5) d=Math.max(d,Math.abs(o-e)); } });
     if(d>2.2&&!known.has(key([r,c]))&&!cliffs.has(key([r,c]))){ const [x,z]=cellXZ(r,c,M); V.dyn.add(tile(x,z,0xe8e05a,.16)); } }
+  const hidCliffs=new Set(M.hidden_cliffs.map(key));
+  const pin=(x,z,color)=>{ const y=heightAt(x,z); const stick=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,2.2,6),new THREE.MeshBasicMaterial({color:0xffffff})); stick.position.set(x,y+1.1,z);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.2,12,8),new THREE.MeshBasicMaterial({color})); head.position.set(x,y+2.3,z); V.dyn.add(stick,head); };
+  (M.destinations||[]).forEach(([dr,dc],i)=>{ const [x,z]=cellXZ(dr,dc,M), y=heightAt(x,z), next=i===0;
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,next?8:5,8),new THREE.MeshBasicMaterial({color:0xff4fd8,transparent:true,opacity:next?.75:.4})); beam.position.set(x,y+(next?4:2.5),z);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.75,.07,8,28),new THREE.MeshBasicMaterial({color:0xff4fd8})); ring.rotation.x=Math.PI/2; ring.position.set(x,y+.25,z); ring.userData.pulse=next;
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:numberTexture(i+1),depthTest:false})); tag.scale.set(1.5,1.5,1); tag.position.set(x,y+(next?8.6:5.6),z);
+    V.dyn.add(beam,ring,tag,tile(x,z,0xff4fd8,next?.3:.18)); });
+  if((M.tour||[]).length>1){ const tour=pathLine(M.tour,0xff4fd8,.05,false,.5); if(tour) V.dyn.add(tour); }
   (M.events||[]).forEach(e=>{ if(!e.position) return; const [x,z]=cellXZ(e.position[0],e.position[1],M);
+    // Operator edits are shown at once, even while the rover has not sensed them yet.
+    if(e.kind==='barranco'&&hidCliffs.has(key(e.position))){ V.dyn.add(tile(x,z,0xff5a4f,.34)); pin(x,z,0xff5a4f); }
+    if(e.kind==='obstaculo_manual'&&hidObs.has(key(e.position))){ if(!reveal) V.dyn.add(rockCluster(x,z,e.position[0]*97+e.position[1]*13,0x6d4a36,1)); V.dyn.add(tile(x,z,0xffc04d,.3)); pin(x,z,0xffc04d); }
     if(e.kind==='meteorito'){ V.dyn.add(tile(x,z,0xd07bff,.35,CS*2.6)); }
     if(e.kind==='alienigena'){ const a=new THREE.Mesh(new THREE.CylinderGeometry(.3,.38,1.6,12),new THREE.MeshStandardMaterial({color:0x7dff9a,emissive:0x2aff6a,emissiveIntensity:.8,transparent:true,opacity:.75})); a.position.set(x,heightAt(x,z)+1,z); a.userData.alien=true; V.dyn.add(a); } });
   // refuges
@@ -416,7 +465,32 @@ function buildDynamic(){
   (M.candidates||[]).forEach((route,i)=>{ if(i===M.chosen) return; const l=pathLine(route,0xb58cff,.05,true,.3); if(l) V.dyn.add(l); });
   const planned=pathLine(M.route,0xffd84a,.08,false,.42); if(planned) V.dyn.add(planned);
   const done=pathLine(M.path,0x5aa9ff,.11,false,.25); if(done) V.dyn.add(done);
+  // ghost race: the other policies on the same map and seed
+  (S.ghosts||[]).forEach((G,i)=>{ const hex=new THREE.Color(GHOST_COL[G.policy]||'#ffffff').getHex();
+    const trail=pathLine(G.path,hex,.045,true,.16+i*.04); if(trail) V.dyn.add(trail);
+    const [gx,gz]=cellXZ(G.position[0],G.position[1],M), x=gx+(i-1)*.45, y=heightAt(gx,gz);
+    const mat=new THREE.MeshBasicMaterial({color:hex,transparent:true,opacity:G.finished?.22:.5,depthWrite:false});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(.9,.45,1.3),mat); body.position.set(x,y+.55,gz);
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,.9,6),mat); mast.position.set(x,y+1.2,gz);
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTexture(GHOST_LBL[G.policy]||G.policy,GHOST_COL[G.policy]),depthTest:false,transparent:true,opacity:.9})); tag.scale.set(2.6,.65,1); tag.position.set(x,y+2.1+i*.5,gz);
+    V.dyn.add(body,mast,tag); });
+  // scout drone
+  const D=S.drone; if(D){ const [x,z]=cellXZ(D.position[0],D.position[1],M), y=heightAt(x,z)+(D.flying?3.2:1.7); const q=new THREE.Group();
+    q.add(new THREE.Mesh(new THREE.BoxGeometry(.5,.14,.5),new THREE.MeshStandardMaterial({color:0x22d3ee,emissive:0x0b6b78,roughness:.4})));
+    [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([a,b])=>{ const arm=new THREE.Mesh(new THREE.BoxGeometry(.5,.04,.06),new THREE.MeshBasicMaterial({color:0x0e7490})); arm.position.set(a*.25,0,b*.25); arm.rotation.y=a*b>0?-Math.PI/4:Math.PI/4;
+      const rotor=new THREE.Mesh(new THREE.CylinderGeometry(.26,.26,.02,14),new THREE.MeshBasicMaterial({color:0xd8faff,transparent:true,opacity:D.flying?.5:.9})); rotor.position.set(a*.42,.09,b*.42); q.add(arm,rotor); });
+    q.position.set(x,y,z); V.dyn.add(q);
+    if(D.flying){ D.scanned.forEach(([r,c])=>{ const [sx,sz]=cellXZ(r,c,M); V.dyn.add(tile(sx,sz,0x22d3ee,.09)); });
+      const ray=new THREE.Mesh(new THREE.CylinderGeometry(.03,.9,3.1,10,1,true),new THREE.MeshBasicMaterial({color:0x22d3ee,transparent:true,opacity:.16,side:THREE.DoubleSide,depthWrite:false})); ray.position.set(x,y-1.6,z); V.dyn.add(ray); }
+    (D.found||[]).forEach(([r,c])=>{ const [fx,fz]=cellXZ(r,c,M); V.dyn.add(tile(fx,fz,0x22d3ee,.5)); }); }
 }
+function chileFlagTexture(){ // drawn by code: no external image files
+  const c=document.createElement('canvas'); c.width=300; c.height=200; const g=c.getContext('2d');
+  g.fillStyle='#ffffff'; g.fillRect(0,0,300,100); g.fillStyle='#d52b1e'; g.fillRect(0,100,300,100); g.fillStyle='#0039a6'; g.fillRect(0,0,100,100);
+  g.fillStyle='#ffffff'; g.beginPath(); for(let i=0;i<10;i++){ const r=i%2?13:33, a=-Math.PI/2+i*Math.PI/5; g.lineTo(50+r*Math.cos(a),50+r*Math.sin(a)); } g.closePath(); g.fill();
+  const t=new THREE.CanvasTexture(c); t.anisotropy=4; return t; }
+function flagPlane(tex,w,h,x,y,z,ry,double){ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:double?THREE.DoubleSide:THREE.FrontSide}));
+  m.position.set(x,y,z); m.rotation.y=ry; return m; }
 function buildRover(){ const g=new THREE.Group(); const white=new THREE.MeshStandardMaterial({color:0xe9e6df,roughness:.5,metalness:.3}), dark=new THREE.MeshStandardMaterial({color:0x2b2f38,roughness:.6,metalness:.4});
   const body=new THREE.Mesh(new THREE.BoxGeometry(1.05,.38,1.35),white); body.position.y=.62; body.castShadow=true; g.add(body);
   const deck=new THREE.Mesh(new THREE.BoxGeometry(1.25,.05,1.55),new THREE.MeshStandardMaterial({color:0x1f3a7a,roughness:.3,metalness:.6,emissive:0x0a1430})); deck.position.y=.84; deck.castShadow=true; g.add(deck);
@@ -429,7 +503,14 @@ function buildRover(){ const g=new THREE.Group(); const white=new THREE.MeshStan
   const beacon=new THREE.Mesh(new THREE.SphereGeometry(.07,8,6),new THREE.MeshBasicMaterial({color:0xffc04d})); beacon.position.set(-.35,1.47,-.45); g.add(beacon); g.userData.beacon=beacon;
   const probe=new THREE.Group(); const balloon=new THREE.Mesh(new THREE.SphereGeometry(.9,20,14),new THREE.MeshStandardMaterial({color:0xf2efe8,roughness:.4})); balloon.position.y=2.2;
   const gondola=new THREE.Mesh(new THREE.BoxGeometry(.6,.35,.6),dark); gondola.position.y=.9; const rope=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,.9,4),white); rope.position.y=1.4;
-  probe.add(balloon,gondola,rope); probe.visible=false; g.add(probe); g.userData.probe=probe; g.userData.roverParts=g.children.filter(o=>o!==probe);
+  const flag=chileFlagTexture();
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.02,.02,1.0,6),white); pole.position.set(.42,1.34,-.55); g.add(pole);
+  const banner=flagPlane(flag,.54,.36,.42,1.64,-.28,Math.PI/2,true); g.add(banner); g.userData.banner=banner;
+  g.add(flagPlane(flag,.42,.28,.531,.62,0,Math.PI/2), flagPlane(flag,.42,.28,-.531,.62,0,-Math.PI/2));
+  const topFlag=(w,h,y,z)=>{ const m=flagPlane(flag,w,h,0,y,z,0); m.rotation.x=-Math.PI/2; return m; }; // readable from the top-down camera
+  g.add(topFlag(.66,.44,.872,-.38));
+  probe.add(balloon,gondola,rope, flagPlane(flag,.42,.28,.305,.9,0,Math.PI/2), flagPlane(flag,.42,.28,-.305,.9,0,-Math.PI/2),
+            flagPlane(flag,.42,.28,0,.9,.305,0), flagPlane(flag,.42,.28,0,.9,-.305,Math.PI), topFlag(.9,.6,3.105,0)); probe.visible=false; g.add(probe); g.userData.probe=probe; g.userData.roverParts=g.children.filter(o=>o!==probe);
   return g; }
 function setRoverStyle(gas){ V.rover.userData.roverParts.forEach(o=>o.visible=!gas); V.rover.userData.probe.visible=!!gas; }
 let lastPos=null, lastStep=-1, lastConfigKey='';
@@ -446,8 +527,8 @@ function sync3d(){ if(!V.renderer||!S) return;
   lastPos=pos; lastStep=S.status.step;
   // lighting: day / night / storm
   const P=PLANETS[S.planet.name]||PLANETS.Marte; const night=!S.status.daylight, storm=S.status.storm>0;
-  V.sun.intensity=P.sun*(night?.18:1)*(storm?.55:1); V.hemi.intensity=night?.28:.75;
-  const sky=new THREE.Color(P.sky); if(night) sky.lerp(new THREE.Color(0x05060c),.82); if(storm) sky.lerp(new THREE.Color(0xa0603a),.5);
+  V.sun.intensity=P.sun*(night?.18:1)*(storm?.55:1)*(S.status.heat>0?1.35:1); V.sun.color.setHex(S.status.heat>0?0xffb070:0xfff0dd); V.hemi.intensity=night?.28:.75;
+  const heat=S.status.heat>0; const sky=new THREE.Color(P.sky); if(night) sky.lerp(new THREE.Color(0x05060c),.82); if(storm) sky.lerp(new THREE.Color(0xa0603a),.5); if(heat) sky.lerp(new THREE.Color(0xff5a1f),.45);
   V.scene.background=sky; V.scene.fog.color.copy(storm?new THREE.Color(0xa86a42):night?new THREE.Color(0x0b0b12):new THREE.Color(P.fog)); V.scene.fog.density=P.fogD*(storm?4.2:night?1.6:1);
   setDust(storm); if(S.status.quake>0) V.shake=.7;
 }
@@ -456,7 +537,7 @@ function setDust(on){ if(on&&!V.dust){ const n=1600, g=new THREE.BufferGeometry(
   if(!on&&V.dust){ V.fx.remove(V.dust); V.dust.geometry.dispose(); V.dust=null; } }
 function meteorFx(cell){ if(!V.renderer||!S) return; const [x,z]=cellXZ(cell[0],cell[1],S.map); const m=new THREE.Mesh(new THREE.SphereGeometry(.4,12,10),new THREE.MeshBasicMaterial({color:0xffb070}));
   m.position.set(x+14,26,z-8); m.userData.meteor={to:new THREE.Vector3(x,heightAt(x,z),z),t:0}; V.fx.add(m); }
-function loop3d(){ requestAnimationFrame(loop3d); if(!V.renderer||!S) return; const dt=Math.min(.05,V.clock.getDelta()), tt=V.clock.elapsedTime, M=S.map;
+function loop3d(){ requestAnimationFrame(loop3d); if(!V.renderer||!S) return; if(viewMode==='2d'){ V.anim.queue.length=0; return; } const dt=Math.min(.05,V.clock.getDelta()), tt=V.clock.elapsedTime, M=S.map;
   // rover animation along queued cells
   const a=V.anim; if(a.t>=1&&a.queue.length){ const c=a.queue.shift(); const [x,z]=cellXZ(c[0],c[1],M); a.from=V.rover.position.clone(); a.to=new THREE.Vector3(x,0,z); a.t=0;
     const dx=a.to.x-a.from.x, dz=a.to.z-a.from.z; if(Math.abs(dx)+Math.abs(dz)>.01) a.heading=Math.atan2(dx,dz); }
@@ -465,7 +546,7 @@ function loop3d(){ requestAnimationFrame(loop3d); if(!V.renderer||!S) return; co
   V.rover.position.y=heightAt(V.rover.position.x,V.rover.position.z)+(gas?1.2+Math.sin(tt*1.4)*.15:0);
   let dh=a.heading-V.rover.rotation.y; dh=Math.atan2(Math.sin(dh),Math.cos(dh)); V.rover.rotation.y+=dh*Math.min(1,dt*6);
   if(V.rover.userData.beacon) V.rover.userData.beacon.material.color.setHex(Math.sin(tt*6)>0?0xffc04d:0x553311);
-  V.dyn.children.forEach(o=>{ if(o.userData.spin){ o.rotation.y+=dt*1.2; o.position.y+=Math.sin(tt*2+o.position.x)*.002; } if(o.userData.alien) o.material.emissiveIntensity=.5+Math.sin(tt*4)*.4; });
+  V.dyn.children.forEach(o=>{ if(o.userData.spin){ o.rotation.y+=dt*1.2; o.position.y+=Math.sin(tt*2+o.position.x)*.002; } if(o.userData.alien) o.material.emissiveIntensity=.5+Math.sin(tt*4)*.4; if(o.userData.pulse){ const k=1+Math.sin(tt*3)*.15; o.scale.set(k,k,1); } });
   V.fx.children.slice().forEach(o=>{ const mm=o.userData.meteor; if(mm){ mm.t+=dt*.9; o.position.lerp(mm.to,Math.min(1,mm.t*.25+.02)); if(mm.t>2.2||o.position.distanceTo(mm.to)<.3){ V.fx.remove(o); } } });
   if(V.dust){ const p=V.dust.geometry.attributes.position; for(let i=0;i<p.count;i++){ let x=p.getX(i)+dt*6; if(x>25) x=-25; p.setX(i,x); } p.needsUpdate=true; }
   // camera
@@ -482,31 +563,135 @@ function bindOrbit(canvas){ let drag=null;
     V.cam.theta-=dx*.006; V.cam.phi=Math.max(.15,Math.min(1.45,V.cam.phi-dy*.005)); drag.x=e.clientX; drag.y=e.clientY; if(V.cam.mode==='top'&&drag.moved) setCam('orbit'); });
   canvas.addEventListener('pointerup',e=>{ canvas.style.cursor='grab'; const wasClick=drag&&!drag.moved; drag=null; if(wasClick) pick(e); });
   canvas.addEventListener('wheel',e=>{ e.preventDefault(); V.cam.radius=Math.max(6,Math.min(60,V.cam.radius*(1+Math.sign(e.deltaY)*.09))); },{passive:false}); }
-function pick(e){ const tool=$('fTool').value; if(!tool||!V.terrain||!S) return; const r=$('scene').getBoundingClientRect();
+const GHOST_COL={hibrido:'#52d58e',sin_rna:'#5aa9ff',sin_difuso:'#c58cff',sin_ag:'#ff9a3c'}, GHOST_LBL={hibrido:'Híbrido',sin_rna:'Sin RNA',sin_difuso:'Sin difuso',sin_ag:'Sin AG'};
+function labelTexture(text,color){ const cache=labelTexture.cache||(labelTexture.cache={}), k=text+color; if(cache[k]) return cache[k]; const c=document.createElement('canvas'); c.width=256; c.height=64; const g=c.getContext('2d');
+  g.fillStyle='rgba(8,6,12,.72)'; g.fillRect(4,8,248,48); g.strokeStyle=color; g.lineWidth=3; g.strokeRect(4,8,248,48); g.fillStyle=color; g.font='bold 30px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,128,34); return cache[k]=new THREE.CanvasTexture(c); }
+function numberTexture(n){ const numberCache=numberTexture.cache||(numberTexture.cache={}); if(numberCache[n]) return numberCache[n]; const c=document.createElement('canvas'); c.width=c.height=64; const g=c.getContext('2d');
+  g.fillStyle='#ff4fd8'; g.beginPath(); g.arc(32,32,28,0,7); g.fill(); g.strokeStyle='#1a0516'; g.lineWidth=4; g.stroke();
+  g.fillStyle='#1a0516'; g.font='bold 38px system-ui,sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(n,32,35); return numberCache[n]=new THREE.CanvasTexture(c); }
+let destMode=false;
+function setDestMode(on){ destMode=on; $('bDest').classList.toggle('on',on); $('view').classList.toggle('picking',on||!!$('fTool').value);
+  $('bDest').textContent=on?'✓ Terminar':'◎ Agregar destinos'; if(on) msg('Haga clic en las celdas del mapa para agregar destinos. Un clic sobre un destino lo quita.'); }
+function cellAction(row,c){ if(!S) return; const M=S.map; if(row<0||c<0||row>=M.height||c>=M.width) return;
+  if(destMode){ const had=(M.destinations||[]).some(d=>d[0]===row&&d[1]===c); call('destination',{position:[row,c]}).then(o=>{ if(o){ const n=o.map.destinations.length; msg(had?`Destino (${row},${c}) quitado. Quedan ${n}.`:`Destino agregado en (${row},${c}). ${n>1?`El AG ordenó los ${n} destinos: recorrido de ${o.status.tour_cells} celdas.`:'Ruta recalculada.'}`); } }); return; }
+  const tool=$('fTool').value; if(!tool) return;
+  const label={obstaculo:'Obstáculo colocado',barranco:'Barranco colocado',limpiar:'Celda limpiada'}[tool];
+  call('place',{position:[row,c],kind:tool}).then(o=>{ if(o) msg(`${label} en (${row},${c}).`+(tool==='limpiar'?'':' Queda marcado en el mapa; el rover debe descubrirlo con sus sensores.')); }); }
+function pick(e){ if((!destMode&&!$('fTool').value)||!V.terrain||!S) return; const r=$('scene').getBoundingClientRect();
   const m=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1); const ray=new THREE.Raycaster(); ray.setFromCamera(m,V.camera);
   const hit=ray.intersectObject(V.terrain)[0]; if(!hit) return; const M=S.map; const c=Math.round(hit.point.x/CS+(M.width-1)/2), row=Math.round(hit.point.z/CS+(M.height-1)/2);
-  if(row<0||c<0||row>=M.height||c>=M.width) return; call('place',{position:[row,c],kind:tool}).then(o=>{ if(o) msg(`Terreno real editado en (${row},${c}): ${tool}. El rover debe descubrirlo con sus sensores.`); }); }
+  cellAction(row,c); }
 function setCam(mode){ V.cam.mode=mode; document.querySelectorAll('[data-cam]').forEach(b=>b.classList.toggle('on',b.dataset.cam===mode)); if(mode==='orbit'){ V.cam.radius=Math.max(V.cam.radius,30); } if(mode==='follow') V.cam.radius=17; }
 document.querySelectorAll('[data-cam]').forEach(b=>b.addEventListener('click',()=>setCam(b.dataset.cam)));
-$('fReveal').addEventListener('change',()=>{ if(S) buildDynamic(); });
+let viewMode='3d', geom2d=null;
+function setView(mode){ viewMode=mode; document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===mode));
+  $('scene').style.display=mode==='3d'?'block':'none'; $('map2d').style.display=mode==='2d'?'block':'none';
+  document.querySelectorAll('[data-cam]').forEach(b=>b.style.display=mode==='3d'?'':'none');
+  document.querySelector('#ovTop b').textContent='ARES-X '+mode.toUpperCase();
+  try{ localStorage.setItem('ares_view',mode); }catch(e){}
+  if(mode==='2d') draw2d(); else { lastPos=null; resize3d(); if(S){ try{ sync3d(); }catch(e){ console.error(e); } } } }
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+const rgb=h=>[(h>>16)&255,(h>>8)&255,h&255];
+function draw2d(){ if(!S||viewMode!=='2d') return; const [g,w,h]=ctx2d($('map2d')); const M=S.map, P=PLANETS[S.planet.name]||PLANETS.Marte, reveal=$('fReveal').checked;
+  const padT=46, padB=74, padX=16; const cs=Math.max(8,Math.floor(Math.min((w-2*padX)/M.width,(h-padT-padB)/M.height)));
+  const ox=Math.floor((w-cs*M.width)/2), oy=padT+Math.floor((h-padT-padB-cs*M.height)/2); geom2d={cs,ox,oy};
+  const X=c=>ox+c*cs+cs/2, Y=r=>oy+r*cs+cs/2, key=c=>c[0]+','+c[1]; const hi=rgb(P.ground[0]), lo=rgb(P.ground[1]);
+  let emin=Infinity, emax=-Infinity; M.elevation.forEach(row=>row.forEach(v=>{ if(v>-5){ emin=Math.min(emin,v); emax=Math.max(emax,v); } }));
+  for(let r=0;r<M.height;r++) for(let c=0;c<M.width;c++){ const e=M.elevation[r][c], t=e<-5?0:Math.max(0,Math.min(1,(e-emin)/((emax-emin)||1)));
+    g.fillStyle=`rgb(${Math.round(lo[0]+(hi[0]-lo[0])*t)},${Math.round(lo[1]+(hi[1]-lo[1])*t)},${Math.round(lo[2]+(hi[2]-lo[2])*t)})`; g.fillRect(ox+c*cs,oy+r*cs,cs-1,cs-1); }
+  M.risk.forEach(([r,c,v])=>{ g.fillStyle=`rgba(255,154,60,${Math.min(.6,v*.65)})`; g.fillRect(ox+c*cs,oy+r*cs,cs-1,cs-1); });
+  const rock=(r,c,dashed)=>{ g.beginPath(); g.arc(X(c),Y(r),cs*.34,0,7); if(dashed){ g.setLineDash([3,3]); g.strokeStyle='#3a2415'; g.lineWidth=1.6; g.stroke(); g.setLineDash([]); } else { g.fillStyle=P.gas?'rgba(90,169,255,.75)':'#4a2f1e'; g.fill(); g.strokeStyle='rgba(0,0,0,.35)'; g.lineWidth=1; g.stroke(); } };
+  const cliff=(r,c,dashed)=>{ const x=ox+c*cs, y=oy+r*cs; g.save(); g.beginPath(); g.rect(x,y,cs-1,cs-1); g.clip(); g.fillStyle=dashed?'rgba(120,20,15,.35)':'rgba(120,20,15,.8)'; g.fillRect(x,y,cs,cs);
+    g.strokeStyle=dashed?'rgba(255,90,79,.6)':'#ff5a4f'; g.lineWidth=dashed?1:2; for(let k=-cs;k<cs*2;k+=7){ g.beginPath(); g.moveTo(x+k,y); g.lineTo(x+k+cs,y+cs); g.stroke(); } g.restore(); };
+  M.obstacles.forEach(([r,c])=>rock(r,c,false)); M.cliffs.forEach(([r,c])=>cliff(r,c,false));
+  if(reveal){ M.hidden_obstacles.forEach(([r,c])=>rock(r,c,true)); M.hidden_cliffs.forEach(([r,c])=>cliff(r,c,true)); }
+  const hidO=new Set(M.hidden_obstacles.map(key)), hidC=new Set(M.hidden_cliffs.map(key));
+  (M.events||[]).forEach(e=>{ if(!e.position) return; const [r,c]=e.position;
+    if(e.kind==='meteorito'){ g.strokeStyle='#d07bff'; g.lineWidth=2; g.beginPath(); g.arc(X(c),Y(r),cs*1.3,0,7); g.stroke(); }
+    if(e.kind==='alienigena'){ g.fillStyle='#7dff9a'; g.beginPath(); g.arc(X(c),Y(r),cs*.22,0,7); g.fill(); }
+    const op=(e.kind==='barranco'&&hidC.has(key(e.position)))||(e.kind==='obstaculo_manual'&&hidO.has(key(e.position)));
+    if(op){ if(e.kind==='barranco') cliff(r,c,true); else rock(r,c,true); g.strokeStyle='#fff'; g.lineWidth=2; g.strokeRect(ox+c*cs+1,oy+r*cs+1,cs-3,cs-3); } });
+  M.refuges.forEach(([r,c])=>{ g.fillStyle='#2f8f5b'; g.fillRect(ox+c*cs+2,oy+r*cs+2,cs-5,cs-5); g.fillStyle='#eafff2'; g.font=`700 ${Math.round(cs*.5)}px Barlow Condensed, sans-serif`; g.textAlign='center'; g.fillText('R',X(c),Y(r)+cs*.18); });
+  M.resources.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#5aa9ff'; g.fillRect(X(c)-cs*.2,Y(r)-cs*.2,cs*.4,cs*.4); g.strokeStyle='#0b1420'; g.lineWidth=1; g.strokeRect(X(c)-cs*.2,Y(r)-cs*.2,cs*.4,cs*.4); });
+  M.science.forEach(([r,c,d])=>{ g.beginPath(); g.moveTo(X(c),Y(r)-cs*.33); g.lineTo(X(c)+cs*.3,Y(r)); g.lineTo(X(c),Y(r)+cs*.33); g.lineTo(X(c)-cs*.3,Y(r)); g.closePath(); g.fillStyle=d?'#52d58e':'#ffd84a'; g.fill(); g.strokeStyle='#1a1205'; g.lineWidth=1; g.stroke(); });
+  const line=(cells,color,width,dash)=>{ if(!cells||cells.length<2) return; g.strokeStyle=color; g.lineWidth=width; g.lineJoin='round'; g.setLineDash(dash||[]); g.beginPath(); cells.forEach(([r,c],i)=>i?g.lineTo(X(c),Y(r)):g.moveTo(X(c),Y(r))); g.stroke(); g.setLineDash([]); };
+  (M.candidates||[]).forEach((rt,i)=>{ if(i!==M.chosen) line(rt,'rgba(181,140,255,.7)',1.5,[3,4]); });
+  line(M.route,'#ffd84a',2.5,[7,4]); line(M.path,'#5aa9ff',3.2);
+  line(M.tour,'rgba(255,79,216,.85)',1.8,[3,5]);
+  (M.destinations||[]).forEach(([r,c],i)=>{ g.strokeStyle='#ff4fd8'; g.lineWidth=i?1.6:2.5; g.beginPath(); g.arc(X(c),Y(r),cs*.42,0,7); g.stroke();
+    g.fillStyle='#ff4fd8'; g.beginPath(); g.arc(X(c),Y(r),cs*.28,0,7); g.fill(); g.fillStyle='#1a0516'; g.font=`bold ${Math.max(9,cs*.36)}px system-ui,sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(i+1,X(c),Y(r)+1); });
+  (S.ghosts||[]).forEach((G,i)=>{ const col=GHOST_COL[G.policy]||'#fff'; g.globalAlpha=G.finished?.35:.7; line(G.path,col,1.6,[2,3]); const [r,c]=G.position; g.fillStyle=col; g.beginPath(); g.arc(X(c)+(i-1)*cs*.2,Y(r)+cs*.24,cs*.17,0,7); g.fill(); g.globalAlpha=1; });
+  if(S.drone){ const D=S.drone, q=cs*.24; if(D.flying){ g.fillStyle='rgba(34,211,238,.13)'; D.scanned.forEach(([r,c])=>g.fillRect(X(c)-cs/2,Y(r)-cs/2,cs,cs)); }
+    (D.found||[]).forEach(([r,c])=>{ g.strokeStyle='#22d3ee'; g.lineWidth=2; g.strokeRect(X(c)-cs*.45,Y(r)-cs*.45,cs*.9,cs*.9); });
+    const [r,c]=D.position, x=X(c), y=Y(r)-(D.flying?0:cs*.3); g.strokeStyle='#22d3ee'; g.lineWidth=2; g.beginPath(); g.moveTo(x-q,y-q); g.lineTo(x+q,y+q); g.moveTo(x+q,y-q); g.lineTo(x-q,y+q); g.stroke();
+    g.fillStyle='#0b1418'; [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>{ g.beginPath(); g.arc(x+a*q,y+b*q,cs*.1,0,7); g.fill(); g.stroke(); }); }
+  const [pr,pc]=S.status.position; const pth=M.path; let ang=0; if(pth.length>1){ const a=pth[pth.length-2]; ang=Math.atan2(pr-a[0],pc-a[1]); }
+  g.save(); g.translate(X(pc),Y(pr)); g.rotate(ang); g.fillStyle='#f3f1ea'; g.strokeStyle='#10131a'; g.lineWidth=1.5; g.beginPath(); g.moveTo(cs*.42,0); g.lineTo(-cs*.3,cs*.3); g.lineTo(-cs*.14,0); g.lineTo(-cs*.3,-cs*.3); g.closePath(); g.fill(); g.stroke(); g.restore();
+  const fw=cs*.42, fh=cs*.28, fx=X(pc)-cs*.5, fy=Y(pr)-cs*.62; g.fillStyle='#fff'; g.fillRect(fx,fy,fw,fh/2); g.fillStyle='#d52b1e'; g.fillRect(fx,fy+fh/2,fw,fh/2); g.fillStyle='#0039a6'; g.fillRect(fx,fy,fw/3,fh/2);
+  if(!S.status.daylight||S.status.storm){ g.fillStyle=S.status.storm?'rgba(168,106,66,.28)':'rgba(5,6,14,.38)'; g.fillRect(ox,oy,cs*M.width,cs*M.height); }
+  if(S.status.heat){ g.fillStyle='rgba(255,90,31,.14)'; g.fillRect(ox,oy,cs*M.width,cs*M.height); }
+  g.fillStyle='#a08d78'; g.font='10px JetBrains Mono, monospace'; g.textAlign='center'; for(let c=0;c<M.width;c++) g.fillText(c,X(c),oy-4); g.textAlign='right'; for(let r=0;r<M.height;r++) g.fillText(r,ox-5,Y(r)+3); g.textAlign='left'; }
+$('map2d').addEventListener('click',e=>{ if(!geom2d||!S) return; const b=$('map2d').getBoundingClientRect(); cellAction(Math.floor((e.clientY-b.top-geom2d.oy)/geom2d.cs),Math.floor((e.clientX-b.left-geom2d.ox)/geom2d.cs)); });
+$('bDest').addEventListener('click',()=>{ $('fTool').value=''; setDestMode(!destMode); });
+$('bDestClear').addEventListener('click',async()=>{ setDestMode(false); if(await call('destination',{position:null})) msg('Destinos quitados: el rover retoma la misión.'); });
+$('fTool').addEventListener('change',()=>{ if($('fTool').value) destMode=false; setDestMode(destMode); if($('fTool').value) msg('Haga clic en una celda del mapa para aplicar la edición.'); });
+$('fReveal').addEventListener('change',()=>{ if(S){ buildDynamic(); draw2d(); } });
 
 // ------------------------------------------------------------ render
 function render(){ if(!S) return; const st=S.status;
   window._lastMoved=S.log.length&&S.log[S.log.length-1].step===st.step?(S.log[S.log.length-1].moved||[]):[];
-  renderTelemetry(); renderTop();
-  try{ sync3d(); }catch(e){ console.error(e); msg('Error al dibujar la escena 3D: '+e.message,true); } // never freeze the panels
+  renderTelemetry(); renderTop(); renderRace(); renderTimeline();
+  try{ sync3d(); draw2d(); }catch(e){ console.error(e); msg('Error al dibujar el mapa: '+e.message,true); } // never freeze the panels
   renderNN(); renderFuzzy(); renderGA(); renderLog();
-  if(st.finished&&running){ running=false; syncRun(); msg('Misión finalizada: '+st.outcome,st.state!=='EXITO'); } }
+  if(raceDone()&&running){ running=false; syncRun(); msg((S.ghosts||[]).length?'Carrera terminada: revise el resultado sobre el mapa.':'Misión finalizada: '+st.outcome,st.state!=='EXITO'); } }
+const raceDone=()=>S.status.finished&&(S.ghosts||[]).every(g=>g.finished);
+function renderRace(){ const G=S.ghosts||[], el=$('ovRace'); if(!G.length){ el.style.display='none'; return; } el.style.display='block'; const st=S.status;
+  const rows=[{policy:S.config.policy,battery:st.battery,science:st.science,state:st.state,finished:st.finished,collisions:S.metrics.collisions,main:true},...G];
+  const done=rows.every(r=>r.finished), score=r=>(r.state==='EXITO'?1e6:0)+r.science*1e4+r.battery-r.collisions*500; if(done) rows.sort((a,b)=>score(b)-score(a));
+  el.innerHTML=`<div class="rh">${done?'Resultado de la carrera':'Carrera de fantasmas'}</div><div class="rr small"><i></i><span style="text-align:left">política</span><span>bat.</span><span>ciencia</span><span>estado</span></div>`+rows.map((r,i)=>`<div class="rr"><i style="background:${r.main?'#e9e6df':GHOST_COL[r.policy]}"></i><b>${done?(i+1)+'. ':''}${GHOST_LBL[r.policy]||r.policy}${r.main?' · rover':''}</b><span>${fmt(r.battery,0)} %</span><span>${Math.round(r.science*100)} %</span><span class="st-${r.state}">${(r.state==='CONFIGURACION'?'EN ESPERA':r.state).replace('_',' ')}</span></div>`).join(''); }
+// ------------------------------------------------------------ alerts at the top of the map (F2)
+const ALERT_MS=6000, ALERT_MAX=3;
+const EVENT_SEV={barranco:'warn',meteorito:'warn',sismo:'warn',tormenta_polvo:'warn',viento:'warn',ola_calor:'warn',falla_sensor:'warn',perdida_enlace:'warn',bateria_baja:'warn',corrosion:'warn',alienigena:'warn',obstaculo:'warn',obstaculo_manual:'warn',destino_descartado:'warn',revision_rna:'warn',destino_alcanzado:'ok',instrumento:'ok'};
+const REASON_SEV={R00_RECURSOS_AGOTADOS:'crit',R01_LIMITE_TERMICO:'crit',R03_DANO_CRITICO:'crit',R06_REFUGIO_INALCANZABLE:'crit',R02_SENSORES_NAVEGACION_FALLIDOS:'warn',R04_VETO_BARRANCO_CONFIRMADO:'warn',R05_RNA_PELIGRO:'warn',R07_RETORNO_ENERGIA:'warn',R10_SIN_RUTA:'warn'};
+const REPEATING=new Set(['R04_VETO_BARRANCO_CONFIRMADO','R05_RNA_PELIGRO']);   // every veto is a new fact; the others alert once per change
+const EVENT_TEXT={barranco:'Barranco real en el terreno, oculto para el rover: debe descubrirlo con sus sensores.',tormenta_polvo:'Baja la visibilidad: el rover reduce la velocidad y recalcula la ruta.',sismo:'Vibración y daño leve: el rover frena, espera y vuelve a medir.',meteorito:'Impacto en el terreno: aparece un obstáculo y la ruta se recalcula.',viento:'Ráfaga fuerte: sube el consumo y la ruta se recalcula.',ola_calor:'Sube la temperatura: más consumo y menor velocidad; ruta recalculada.',bateria_baja:'Cae la energía disponible: se recalcula la ruta priorizando el refugio.',falla_sensor:'Un sensor queda fuera de servicio: avance conservador con los restantes.',perdida_enlace:'Sin enlace con el operador: el rover sigue de forma autónoma.',biosenal_anomala:'Anomalía registrada para análisis. No confirma vida.',alienigena:'Evento narrativo ficticio: se registra el contacto y se evita la zona.',dia:'Amanece: mejora la visibilidad y vuelve la recarga solar.',noche:'Anochece: baja la visibilidad y se detiene la recarga solar.',corrosion:'La integridad baja por corrosión.'};
+function pushAlert(sev,title,text){ const box=$('alerts'), el=document.createElement('div'); el.className='alert '+sev;
+  const body=document.createElement('div'), b=document.createElement('b'), x=document.createElement('button'); b.textContent=title; body.append(b,document.createTextNode(text)); x.textContent='×'; x.title='Cerrar'; x.setAttribute('aria-label','Cerrar alerta'); x.onclick=()=>el.remove();
+  el.append(body,x); box.append(el); while(box.children.length>ALERT_MAX) box.firstElementChild.remove();
+  if(sev!=='crit') setTimeout(()=>el.remove(),ALERT_MS); }
+function notify(o,prev){ const feed=o.event_feed; if(!feed) return;
+  if(!prev||o.status.step===0&&feed.total<(prev.event_feed||{total:0}).total||o.config.seed!==prev.config.seed||o.planet.name!==prev.planet.name){ if(prev) $('alerts').replaceChildren(); return; }   // first load or a new mission: nothing to announce
+  const fresh=Math.min(feed.recent.length,Math.max(0,feed.total-(prev.event_feed||{total:feed.total}).total));
+  feed.recent.slice(feed.recent.length-fresh).forEach(e=>pushAlert(EVENT_SEV[e.kind]||'info',e.label,/^Evento aplicado/.test(e.message)&&EVENT_TEXT[e.kind]?EVENT_TEXT[e.kind]:e.message));
+  const r=o.decision&&o.decision.reason, pr=prev.decision&&prev.decision.reason;
+  if(r&&REASON_SEV[r]&&o.status.step!==prev.status.step&&(r!==pr||REPEATING.has(r))) pushAlert(REASON_SEV[r],r.replace(/_/g,' '),o.decision.explanation||(META.reasons||{})[r]||'');
+  if(o.status.finished&&!prev.status.finished) pushAlert(o.status.state==='EXITO'?'ok':'crit','Fin de misión',o.status.outcome||''); }
+// ------------------------------------------------------------ replay with timeline (F15)
+let frames=[], replayAt=null;
+function recordFrame(o){ const n=o.status.step; if(n===0||n<frames.length-1) frames=[]; frames[n]=o; frames.length=n+1; replayAt=null; }
+function firstFrame(){ return Math.max(0,frames.findIndex(f=>f)); }
+function seek(i){ if(!frames.length) return; running=false; syncRun(); const last=frames.length-1; i=Math.max(firstFrame(),Math.min(last,Math.round(i))); while(i>0&&!frames[i]) i--; if(!frames[i]) return;
+  replayAt=i>=last?null:i; S=frames[i]; lastPos=null; V.anim&&(V.anim.queue=[]); render(); }
+function renderTimeline(){ const last=Math.max(0,frames.length-1), at=replayAt===null?last:replayAt, sl=$('tSlider'); sl.min=firstFrame(); sl.max=last; sl.value=at;
+  $('tLabel').textContent=`paso ${at}/${last}`; $('tLive').classList.toggle('on',replayAt===null); $('tLive').textContent=replayAt===null?'● En vivo':'Volver al presente'; $('ovTime').classList.toggle('replay',replayAt!==null);
+  $('alerts').style.display=replayAt===null?'flex':'none';
+  const why=$('ovWhy'); if(replayAt===null){ why.style.display='none'; return; } why.style.display='block';
+  const L=S.log.length&&S.log[S.log.length-1].step===S.status.step?S.log[S.log.length-1]:null;
+  why.innerHTML=`<b>REPETICIÓN · PASO ${at}</b> · ¿por qué hizo esto?<br>`+(L?`<span class="mono">${L.reason}</span> → ${L.action}. ${L.explanation||(META.reasons||{})[L.reason]||''}<br><span class="small">RNA: ${L.rna||'—'}${L.conf!=null?' ('+fmt(L.conf*100,0)+' %)':''} · velocidad difusa ${L.speed!=null?fmt(L.speed,2):'—'} · batería ${fmt(L.battery,1)} %${(L.events||[]).length?' · eventos: '+L.events.join(', '):''}</span>`:'Inicio de la misión: ruta inicial planificada, aún sin decisiones.'); }
+$('tSlider').addEventListener('input',e=>seek(+e.target.value));
+$('tPrev').addEventListener('click',()=>seek((replayAt===null?frames.length-1:replayAt)-1));
+$('tNext').addEventListener('click',()=>seek((replayAt===null?frames.length-1:replayAt)+1));
+$('tLive').addEventListener('click',()=>seek(frames.length-1));
 function tl(name,unit,val,status,chipText){ return `<div class="tl ${status}"><div><div class="n">${name}</div><div class="u">${unit}</div></div><div class="v">${val}</div><span class="chip ${status}">${chipText||{ok:'NOMINAL',warn:'ALERTA',bad:'CRÍTICO',ref:'REF.'}[status||'ok']}</span></div>`; }
 function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
   $('pName').textContent=P.name; $('pInfo').innerHTML=`${P.mode==='rover'?'Rover de superficie':'Sonda atmosférica virtual'}<br>g ${fmt(P.gravity,2)} m/s² · ${fmt(P.temperature,0)} °C ref.`; drawPlanetIcon(P.name);
-  $('tSub').textContent=`SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')} · ${st.daylight?'día':'noche'}`;
+  $('tSub').textContent=`SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')} · ${st.daylight?'día':'noche'}${st.storm?' · tormenta':''}${st.heat?' · ola de calor':''}${st.wind?' · viento':''}`;
   const bat=st.battery, nv=T.nav_valid||{};
   $('tele').innerHTML=[
     tl('Batería','% · ciclo solar',fmt(bat,1)+' %',bat<15?'bad':bat<35?'warn':'ok'),
     tl('Integridad','% mecánica',fmt(st.health,0)+' %',st.health<30?'bad':st.health<70?'warn':'ok'),
     tl('Temp. exterior','°C · sensor',fmt(T.temperature_external,1),'ref','AMBIENTE'),
-    tl('Temp. componentes','°C · interna',fmt(st.temperature_internal,1),st.temperature_internal>60?'bad':st.temperature_internal>45?'warn':'ok'),
+    tl('Temp. componentes','°C · interna',fmt(st.temperature_internal,1),st.temperature_internal>60?'bad':st.temperature_internal>45?'warn':'ok',st.heat?`CALOR ${st.heat}`:null),
     tl('O₂ exterior (ambiental)','% vol. · no respiración',fmt(T.oxygen_ambient,2),'ref'),
     tl('O₂ almacenado','% · experimentos',fmt(T.oxygen_stored,0),'ok'),
     tl('Presión','Pa · referencia',T.pressure!==null&&T.pressure!==undefined?(T.pressure>=1e5?(T.pressure/1e5).toFixed(1)+' bar':Math.round(T.pressure)):'—','ref'),
@@ -517,17 +702,24 @@ function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
     tl('LIDAR / borde','Δ elevación m',nv.lidar===false?'NaN':fmt(T.elevation_delta,1),nv.lidar===false?'bad':T.edge_cliff?'bad':'ok',nv.lidar===false?'FALLA':T.edge_cliff?'BARRANCO':null),
     tl('Visibilidad','0–1 · partículas',fmt(st.visibility,2),st.visibility<.4?'bad':st.visibility<.8?'warn':'ok'),
     tl('Potencia solar','W simulados',fmt(T.solar_power,1),T.solar_power<1?'warn':'ok'),
-    tl('Enlace','latencia / autonomía',st.link?'OK':'Perdido',st.link?'ok':'warn',st.link?null:'AUTÓNOMO'),
+    tl('Enlace','latencia s · órdenes en cola',st.link?'OK':`${fmt(st.link_latency,0)} s · ${st.queued_orders}`,st.link?'ok':'warn',st.link?null:'AUTÓNOMO'),
+    tl('Vibración','m/s² · sismómetro',fmt(st.vibration,1),st.vibration>0?'warn':'ok'),
+    tl('Viento','m/s · consumo +30 %',fmt(st.wind,0),st.wind>0?'warn':'ok'),
+    tl('Eventos','total · anomalías · contactos',`${st.events_total} · ${st.anomalies} · ${st.contacts}`,'ref','CONTEO'),
+    tl('Pasos perdidos','espera · sensor degradado',`${st.wait_steps} · ${st.degraded_steps}`,'ref','CONTEO'),
     tl('Ciencia','% sitios visitados',Math.round(st.science*100)+' %','ok','PROGRESO'),
+    tl('Dron explorador','peligros detectados',S.drone?S.metrics.drone_discoveries:'—',S.drone?(S.drone.flying?'ok':'warn'):'ref',S.drone?(S.drone.flying?'VOLANDO':'EN TIERRA'):'APAGADO'),
+    tl('Destinos','pendientes · celdas al próximo',S.map.destination?`${st.destinations_left} · ${st.destination_distance??'—'}`:'—',S.map.destination?'warn':'ref',S.map.destination?'EN RUTA':'SIN FIJAR'),
     tl('Instrumentación','cajas recuperadas',`${st.instruments}/${st.instruments_total}`,st.instruments>=st.instruments_total?'ok':'ref',st.instruments>=st.instruments_total?'COMPLETO':'PENDIENTE')].join(''); }
-function renderTop(){ const st=S.status;
+function renderTop(){ const st=S.status; $('bGhost').classList.toggle('on',(S.ghosts||[]).length>0); $('bDrone').classList.toggle('on',!!S.config.drone); $('bDrone').title=S.drone&&S.drone.reason?S.drone.reason:'Un dron vuela adelante y comparte los peligros que ve';
   if(document.activeElement!==$('fDur')){ $('fDur').value=S.config.step_duration; $('lDur').textContent=(+S.config.step_duration).toFixed(1)+' s'; }
   $('oPlanet').textContent=`${S.planet.name.toUpperCase()} · SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')}`;
   $('oStep').textContent=`paso ${st.step} · t=${fmt(st.t,1)} s`; $('oPolicy').textContent=S.policy_label; $('cSeed').textContent=`semilla ${S.config.seed}`;
   const label={CONFIGURACION:'EN ESPERA'}[st.state]||st.state.replace('_',' ');
   $('sState').textContent=label+(st.finished?' · FIN':''); $('sState').className='st st-'+st.state;
   const D=S.decision; $('sExpl').textContent=st.finished?st.outcome:(D?`${D.reason}: ${D.explanation}`:'Configure la misión y presione Iniciar.');
-  document.querySelectorAll('[data-planet]').forEach(b=>b.classList.toggle('sel',b.dataset.planet===S.planet.name)); }
+  document.querySelectorAll('[data-planet]').forEach(b=>b.classList.toggle('sel',b.dataset.planet===S.planet.name));
+  const ds=S.map.destinations||[]; $('destInfo').textContent=ds.length?`${ds.length} destino(s) en orden de visita: `+ds.map((d,i)=>`${i+1}·(${d[0]},${d[1]})`).join(' → ')+` · recorrido ${st.tour_cells} celdas con retorno`:'Sin destinos. Presione «Agregar destinos» y haga clic en una o varias celdas: el AG calcula el mejor orden de visita.'; }
 
 // ------------------------------------------------------------ D · neural network
 const FEAT_LBL={distance:'Distancia',slope:'Pendiente',elevation_delta:'Δ elevación',texture:'Textura',visibility:'Visibilidad',vibration:'Vibración'};
@@ -642,6 +834,7 @@ async function renderGA(force){ if(!S) return; if(!gaParamsBuilt) buildGaParams(
   M.science.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#ffd84a'; g.beginPath(); g.arc(ox+c*cs+cs/2,oy+r*cs+cs/2,cs*.32,0,7); g.fill(); });
   M.resources.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#5aa9ff'; g.fillRect(ox+c*cs+cs*.25,oy+r*cs+cs*.25,cs*.5,cs*.5); });
   M.refuges.forEach(([r,c])=>{ g.strokeStyle='#52d58e'; g.lineWidth=1.5; g.strokeRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2); });
+  (M.destinations||[]).forEach(([r,c],i)=>{ g.strokeStyle='#ff4fd8'; g.lineWidth=i?1:2; g.beginPath(); g.arc(ox+c*cs+cs/2,oy+r*cs+cs/2,cs*.55,0,7); g.stroke(); });
   const [pr,pc]=S.status.position; g.fillStyle='#5aa9ff'; g.beginPath(); g.arc(ox+pc*cs+cs/2,oy+pr*cs+cs/2,cs*.38,0,7); g.fill();
   // fitness chart
   const [g2,w2,h2]=ctx2d($('gaFit')); const hb=(G.history||[]).map(x=>x.best), hf=(G.history||[]).map(x=>x.best_feasible);
@@ -677,23 +870,64 @@ function renderCompare(){ const C=S&&S.comparison; if(!C||logMode!=='cmp') retur
   g.fillStyle=css('--ok'); g.fillText('éxito',4,10); g.fillStyle=css('--bad'); g.fillText('colisiones (0–3)',40,10); }
 
 // ------------------------------------------------------------ controls
-function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value, step_duration:Number($('fDur').value)}; }
+function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value, step_duration:Number($('fDur').value), drone:!!(S&&S.config.drone)}; }
 function syncRun(){ const b=$('bRun'); b.textContent=running?'⏸ Pausa':'▶ Iniciar'; }
-async function loop(){ if(!running) return; await call('step',{n:+$('fSpeed').value}); if(running&&S&&!S.status.finished) setTimeout(loop,330); else { running=false; syncRun(); } }
-$('bRun').addEventListener('click',()=>{ if(S&&S.status.finished){ msg('La misión terminó. Reinicie o cambie la configuración.'); return; } running=!running; syncRun(); if(running){ msg('Simulación en curso.'); loop(); } else msg('Pausada.'); });
+const BASE_STEP_MS=700, SPEEDS=[.5,.75,1,1.5,2,4];
+const speedMult=()=>SPEEDS[+$('fSpeed').value]||1;
+let runId=0; // each start gets its own id, so a stale timer from a previous run can never step
+async function loop(id){ if(!running||id!==runId) return; const t0=performance.now(); await call('step',{n:1});
+  if(id!==runId) return;
+  // Cadence is measured step to step, so engine latency does not slow the simulation further.
+  const wait=Math.max(0,BASE_STEP_MS/speedMult()-(performance.now()-t0));
+  if(running&&S&&!raceDone()) setTimeout(()=>loop(id),wait); else { running=false; syncRun(); } }
+$('bRun').addEventListener('click',()=>{ if(replayAt!==null) seek(frames.length-1); if(S&&raceDone()){ msg('La misión terminó. Reinicie o cambie la configuración.'); return; } running=!running; syncRun(); if(running){ msg('Simulación en curso.'); loop(++runId); } else msg('Pausada.'); });
 $('bStep').addEventListener('click',()=>{ running=false; syncRun(); call('step',{n:1}); });
+$('bGhost').addEventListener('click',async()=>{ running=false; syncRun(); const on=!(S.ghosts||[]).length; if(await call('ghosts',{enabled:on})){ gaRunSel=null; msg(on?'Carrera de fantasmas activada: las otras políticas corren el mismo mapa y la misma semilla. Misión reiniciada.':'Carrera de fantasmas desactivada. Misión reiniciada.'); } });
+$('bDrone').addEventListener('click',async()=>{ running=false; syncRun(); const on=!S.config.drone; if(await call('configure',{...formConfig(),drone:on})){ gaRunSel=null; msg(on?'Dron explorador activado: revisa las 4 celdas siguientes de la ruta y comparte los peligros que ve. Misión reiniciada.':'Dron explorador desactivado. Misión reiniciada.'); } });
 $('bReset').addEventListener('click',async()=>{ running=false; syncRun(); if(await call('reset',{})){ gaRunSel=null; msg('Misión reiniciada con la misma semilla.'); } });
 $('bApply').addEventListener('click',async()=>{ running=false; syncRun(); if(await call('configure',formConfig())){ gaRunSel=null; msg('Configuración aplicada. Nuevo terreno generado.'); } });
 $('fBattery').addEventListener('input',()=>$('lBat').textContent=$('fBattery').value+' %');
-$('fSpeed').addEventListener('input',()=>$('lSpeed').textContent=$('fSpeed').value+'×');
+$('fSpeed').addEventListener('input',()=>$('lSpeed').textContent='×'+String(speedMult()).replace('.',','));
 $('fDur').addEventListener('input',()=>$('lDur').textContent=(+$('fDur').value).toFixed(1)+' s (aplicar)');
+// ------------------------------------------------------------ interplanetary travel (F1)
+const TRAVEL_MS=3000; let travelSkip=null;
+function planetDisc(g,name,x,y,r){ const p=PLANETS[name]||PLANETS.Marte; if(r<=.5) return;
+  const gr=g.createRadialGradient(x-r*.3,y-r*.35,r*.1,x,y,r); gr.addColorStop(0,p.icon[0]); gr.addColorStop(1,p.icon[1]);
+  g.save(); g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle=gr; g.fill(); g.clip();
+  if(p.gas){ g.globalAlpha=.22; g.fillStyle='#fff'; for(let i=-2;i<=2;i++) g.fillRect(x-r,y+i*r*.3-r*.05,r*2,r*.1); g.globalAlpha=1; }
+  const sh=g.createLinearGradient(x-r*.4,y-r*.4,x+r,y+r*.8); sh.addColorStop(0,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(0,0,0,.6)'); g.fillStyle=sh; g.fillRect(x-r,y-r,r*2,r*2); g.restore();
+  if(name==='Saturno'){ g.strokeStyle='#e8d7a8'; g.lineWidth=Math.max(1,r*.08); g.beginPath(); g.ellipse(x,y,r*1.6,r*.34,-.3,0,7); g.stroke(); } }
+function travelTo(from,to){ return new Promise(done=>{ const c=$('travel'); c.style.display='block'; c.style.opacity=1; const [g,w,h]=ctx2d(c);
+  const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches, total=reduced?700:TRAVEL_MS;
+  const stars=Array.from({length:140},(_,i)=>({x:(i*97%211)/211,y:(i*53%199)/199,z:.3+(i*31%100)/140})); const t0=performance.now(); let ended=false;
+  const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2, clamp=(v)=>Math.max(0,Math.min(1,v));
+  const end=()=>{ if(ended) return; ended=true; travelSkip=null; c.removeEventListener('click',end); c.style.display='none'; done(); };
+  travelSkip=end; c.addEventListener('click',end);
+  (function frame(now){ if(ended) return; const t=clamp((now-t0)/total), u=Math.min(w,h); g.clearRect(0,0,w,h); g.fillStyle='#03040a'; g.fillRect(0,0,w,h);
+    const warp=reduced?0:Math.sin(Math.PI*clamp((t-.2)/.6));                        // star streaks peak mid-flight
+    stars.forEach(s=>{ const x=((s.x-t*s.z*1.4)%1+1)%1*w, y=s.y*h, len=2+warp*90*s.z; g.strokeStyle=`rgba(210,225,255,${.35+.5*s.z})`; g.lineWidth=s.z*1.6; g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y); g.stroke(); });
+    const a=ease(clamp(t/.45)), b=ease(clamp((t-.55)/.45));                          // origin recedes, destination approaches
+    planetDisc(g,from,w*(.3-.42*a),h*(.55+.1*a),u*.34*(1-a*.93));
+    planetDisc(g,to,w*(1.12-.42*b),h*(.45+.1*(1-b)),u*.34*(.07+b*.93));
+    if(!reduced){ const k=ease(clamp((t-.12)/.76)), x=w*(.12+.76*k), y=h*(.5-.12*Math.sin(Math.PI*k)), sz=u*.035;      // ship
+      g.save(); g.translate(x,y); g.rotate(-.35*Math.cos(Math.PI*k));
+      const fl=g.createLinearGradient(-sz*4,0,-sz,0); fl.addColorStop(0,'rgba(255,170,60,0)'); fl.addColorStop(1,'rgba(255,220,140,.95)'); g.fillStyle=fl; g.beginPath(); g.moveTo(-sz,-sz*.35); g.lineTo(-sz*(3+Math.sin(now/40)),0); g.lineTo(-sz,sz*.35); g.fill();
+      g.fillStyle='#e9edf5'; g.beginPath(); g.moveTo(sz*1.6,0); g.lineTo(-sz,-sz*.55); g.lineTo(-sz,sz*.55); g.closePath(); g.fill();
+      g.fillStyle='#9aa3b5'; g.beginPath(); g.moveTo(-sz,-sz*.55); g.lineTo(-sz*1.5,-sz); g.lineTo(-sz*.3,-sz*.3); g.closePath(); g.fill(); g.beginPath(); g.moveTo(-sz,sz*.55); g.lineTo(-sz*1.5,sz); g.lineTo(-sz*.3,sz*.3); g.closePath(); g.fill();
+      g.fillStyle='#d52b1e'; g.fillRect(-sz*.5,-sz*.22,sz*.9,sz*.44); g.fillStyle='#fff'; g.fillRect(-sz*.5,-sz*.22,sz*.9,sz*.22); g.fillStyle='#0039a6'; g.fillRect(-sz*.5,-sz*.22,sz*.3,sz*.22); g.restore(); }
+    g.textAlign='center'; g.fillStyle='#e8ecf5'; g.font=`600 ${Math.max(13,u*.05)}px system-ui,sans-serif`; g.fillText(`${from.toUpperCase()}  →  ${to.toUpperCase()}`,w/2,h*.88);
+    g.fillStyle='rgba(200,210,230,.7)'; g.font=`${Math.max(10,u*.028)}px system-ui,sans-serif`; g.fillText('Viaje interplanetario simulado · clic para saltar',w/2,h*.94);
+    c.style.opacity=t>.9?1-(t-.9)/.1:1;
+    if(t>=1) end(); else requestAnimationFrame(frame); })(t0); }); }
 async function choosePlanet(name){ running=false; syncRun(); const P=PLANETS[name]; const cfg={...formConfig(),planet:name};
   const v=await api('validate',cfg); if(v.error){ msg(v.error+(P&&P.gas?' Presione otra vez para usar el modo sonda.':''),true);
     if(P&&P.gas){ $('fMode').value='sonda'; } return; }
-  if(await call('configure',cfg)){ gaRunSel=null; msg(`${name}: ${P&&P.gas?'sonda atmosférica virtual (sin suelo sólido para ruedas)':'superficie simulada'} · nuevo terreno.`); } }
+  const from=S&&S.planet.name, trip=from&&from!==name?travelTo(from,name):null;      // only for a valid change of planet
+  const ok=await call('configure',cfg); if(!ok&&travelSkip) travelSkip(); if(trip) await trip;
+  if(ok){ gaRunSel=null; msg(`${name}: ${P&&P.gas?'sonda atmosférica virtual (sin suelo sólido para ruedas)':'superficie simulada'} · nuevo terreno.`); } }
 document.querySelectorAll('[data-export]').forEach(b=>b.addEventListener('click',async()=>{ const o=await api('export',{format:b.dataset.export}); if(o.error){ msg(o.error,true); return; }
   const blob=new Blob([o.content],{type:'text/plain;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=o.filename; document.body.appendChild(a); a.click(); a.remove(); msg('Exportado '+o.filename); }));
-window.addEventListener('resize',()=>{ clearTimeout(window._rt); window._rt=setTimeout(()=>{ renderNN(); renderFuzzy(); renderGA(); renderCompare(); },150); });
+window.addEventListener('resize',()=>{ clearTimeout(window._rt); window._rt=setTimeout(()=>{ draw2d(); renderNN(); renderFuzzy(); renderGA(); renderCompare(); },150); });
 
 async function init(){
   META=await api('meta'); if(META.error){ msg(META.error,true); return; }
@@ -705,6 +939,7 @@ async function init(){
   document.querySelectorAll('[data-ev]').forEach(b=>b.addEventListener('click',async()=>{ const args={kind:b.dataset.ev}; if(b.dataset.sensor) args.sensor=b.dataset.sensor;
     const o=await call('inject',args); if(o){ const e=o.map.events.slice(-1)[0]; if(b.dataset.ev==='meteorito'&&e&&e.position) meteorFx(e.position); msg('Evento: '+b.title+'. El supervisor lo evaluará en el próximo paso.'); } }));
   buildFeat(); initScene();
+  try{ if(localStorage.getItem('ares_view')==='2d') setView('2d'); }catch(e){}
   await call('state',{});
   $('fMode').value=S.config.mode==='rover'?'rover':'sonda'; $('fSeed').value=S.config.seed; $('fDiff').value=S.config.difficulty; $('fBattery').value=S.config.battery; $('lBat').textContent=S.config.battery+' %'; $('fPolicy').value=S.config.policy; $('fDur').value=S.config.step_duration; $('lDur').textContent=(+S.config.step_duration).toFixed(1)+' s';
 }

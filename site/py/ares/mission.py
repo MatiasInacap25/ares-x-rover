@@ -16,7 +16,7 @@ import numpy as np
 
 from .events import Event
 from .fuzzy import FuzzyController
-from .genetic import GeneticPlanner
+from .genetic import GeneticPlanner, optimize_visit_order
 from .logger import MissionLogger, clean
 from .neural import NeuralPerception
 from .planet import ASSUMPTION, PROFILES, PlanetProfile, normalize
@@ -39,12 +39,23 @@ FIXED_RISK = .15          # constant estimated risk for the 'ag_puro' baseline
 DAY_LENGTH = 30           # steps per half day/night cycle (supuesto)
 MAX_STEPS = 400
 INSTRUMENT_BATTERY = 5.   # battery recovered with each instrument cache (supuesto)
+# Event effects (all values are simulation assumptions).
+MAX_DESTINATIONS = 8
+DRONE_AHEAD, DRONE_ENERGY, DRONE_RESERVE = 4, .08, 15.  # cells scouted, % battery per flight, minimum battery
+HEAT_STEPS, HEAT_EXTERNAL, HEAT_INTERNAL, HEAT_ENERGY = 12, 40., 35., 1.2
+WIND_STEPS, WIND_ENERGY, WIND_SPEED = 5, 1.3, 22.
+LINK_STEPS = 10
+QUAKE_DAMAGE, METEORITE_DAMAGE, BIOSIGNAL_ENERGY, VIBRATION_LEVEL = 3., 5., 1., 2.5
+# Events the rover perceives at once: the route is recomputed when they happen (F9).
+# Hidden hazards (cliff, alien, manual obstacle) are discovered later by the sensors.
+PERCEIVABLE_EVENTS = ('meteorito', 'sismo', 'viento', 'bateria_baja', 'ola_calor', 'tormenta_polvo')
+WAIT_REASONS = ('R02_SENSORES_NAVEGACION_FALLIDOS', 'R08_ESPERA_SISMO', 'R12_DIFUSO_PARAR', 'R16_ESPERA_VIENTO')
 EVENT_LABELS = {
     'barranco': 'Barranco', 'bateria_baja': 'Batería baja', 'dia': 'Día', 'noche': 'Noche',
     'sismo': 'Sismo', 'meteorito': 'Meteorito', 'tormenta_polvo': 'Tormenta de polvo',
     'corrosion': 'Corrosión', 'biosenal_anomala': 'Señal biológica anómala',
     'alienigena': 'Objeto/ser alienígena (ficción)', 'falla_sensor': 'Falla de sensor',
-    'perdida_enlace': 'Pérdida de enlace', 'viento': 'Ráfaga de viento',
+    'perdida_enlace': 'Pérdida de enlace', 'viento': 'Ráfaga de viento', 'ola_calor': 'Ola de calor',
 }
 
 _NN_CACHE = {}
@@ -70,7 +81,7 @@ def validate_config(config):
     cfg = dict(planet='Marte', mode='rover', seed=42, difficulty='medium', battery=100.,
                policy='hibrido', step_duration=1., science_count=5, thermal_limit=70.,
                weights=None, hidden_cliffs=4, ga_population=30, ga_generations=30,
-               ga_crossover=.85, ga_mutation=.25)
+               ga_crossover=.85, ga_mutation=.25, drone=False)
     cfg.update({k: v for k, v in (config or {}).items() if v is not None})
     if normalize(str(cfg['planet'])) not in PROFILES:
         raise ValueError(f"Planeta desconocido: {cfg['planet']}")
@@ -98,6 +109,9 @@ def validate_config(config):
         if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or not low <= value <= high:
             raise ValueError(f'{key}: debe ser entero entre {low} y {high}')
         cfg[key] = int(value)
+    if not isinstance(cfg['drone'], (bool, np.bool_)):
+        raise ValueError('drone: debe ser verdadero o falso')
+    cfg['drone'] = bool(cfg['drone'])
     if cfg['difficulty'] not in ('low', 'medium', 'high'):
         raise ValueError('Dificultad inválida: low, medium o high')
     if cfg['policy'] not in POLICIES:
@@ -187,8 +201,12 @@ class HybridMission:
         self.finished = False
         self.outcome = None
         self.replan_reason = 'INICIO'
-        self.timers = {'storm': 0, 'link': 0, 'vibration': 0}
+        self.timers = {'storm': 0, 'link': 0, 'vibration': 0, 'heat': 0, 'wind': 0}
+        self.link_down_steps = 0
+        self.queued_orders = 0
         self.sensor_timers = {}
+        self.destinations = []  # operator waypoints in visiting order (F6, F13)
+        self.tour_cells = 0
         self.day_counter = 0
         self.no_route_steps = 0
         self.nothing_left = False
@@ -197,7 +215,10 @@ class HybridMission:
         self.last = {}
         self.metrics = dict(collisions=0, cliffs_avoided=0, hazards_avoided=0, replans=0, ga_runs=0,
                             science_samples=0, safety_violations=0, energy_used=0., distance=0,
-                            decision_seconds=0., planning_seconds=0., anomalies=0)
+                            decision_seconds=0., planning_seconds=0., anomalies=0, contacts=0, events={},
+                            wait_steps=0, degraded_steps=0, link_outage_steps=0,
+                            drone_steps=0, drone_discoveries=0, drone_energy=0.)
+        self.drone = None  # scout drone state (F16); None when the mission has no drone
 
     # ------------------------------------------------------------------ setup
     def _free_cells(self):
@@ -246,11 +267,26 @@ class HybridMission:
     # -------------------------------------------------------------- helpers
     @property
     def temperature_internal(self):
-        return 20. + (self.profile.temperature - 20.) * .1  # thermal control model (supuesto)
+        base = 20. + (self.profile.temperature - 20.) * .1  # thermal control model (supuesto)
+        return base + (HEAT_INTERNAL if self.timers['heat'] else 0.)
+
+    @property
+    def vibration_level(self):
+        return VIBRATION_LEVEL if self.timers['vibration'] else 0.
+
+    @property
+    def wind_speed(self):
+        return WIND_SPEED if self.timers['wind'] else 0.
+
+    @property
+    def link_latency(self):
+        """Seconds since the link was lost (0 with the link up)."""
+        return self.link_down_steps * self.config['step_duration']
 
     def cell_cost(self, speed=FIXED_SPEED, slope=0.):
         base = .45 * (.7 + .6 * speed) * (1 + .5 * (1 - self.visibility)) + .01 * slope
-        return base * self.config['step_duration']
+        factor = (HEAT_ENERGY if self.timers['heat'] else 1.) * (WIND_ENERGY if self.timers['wind'] else 1.)
+        return base * self.config['step_duration'] * factor
 
     def _bfs(self, start, goal=None, avoid=frozenset(), goals=None):
         goals = goals or {goal}
@@ -312,8 +348,13 @@ class HybridMission:
         }
 
     def _observe(self, cell):
-        return self.sensors.observe(self.world, self.position, cell, self.battery, self.profile,
-                                    self.daylight, self.visibility)
+        readings = self.sensors.observe(self.world, self.position, cell, self.battery, self.profile,
+                                        self.daylight, self.visibility)
+        if self.timers['heat'] and _finite(readings.get('temperature_external')):
+            readings['temperature_external'] += HEAT_EXTERNAL
+        readings['vibration'] = self.vibration_level
+        readings['wind_speed'] = self.wind_speed
+        return readings
 
     # ------------------------------------------------------------- planning
     def _mark_rna(self, cell, label):
@@ -323,6 +364,8 @@ class HybridMission:
             self.rna_marks.add(cell)
 
     def _plan(self, reason):
+        if self.destinations and not self.returning:
+            self._order_destinations()
         self._plan_once(reason)
         if len(self.route) <= 1 and self.rna_marks:
             # No route while relying on unconfirmed RNA beliefs: discard them once and
@@ -340,6 +383,11 @@ class HybridMission:
             self.event_log.append(entry)
             self.pending_events.append(entry)
             self._plan_once(reason + '+REVISION_RNA')
+        while len(self.route) <= 1 and self.destinations and not self.returning:
+            # The next destination became unreachable (new hazard or low energy): drop it and resume.
+            self._drop_destination(self.destinations[0])
+            self._order_destinations()
+            self._plan_once(reason + '+SIN_DESTINO')
         if len(self.route) <= 1 and not self.returning and self.position not in self.world.refuges:
             # No feasible exploration plan (typically low energy): head for the nearest
             # reachable refuge instead of waiting without a route.
@@ -347,6 +395,56 @@ class HybridMission:
             if back and len(back) > 1:
                 self.returning = True
                 self._plan_once(reason + '+RETORNO')
+
+    @property
+    def destination(self):
+        """Next operator destination in the optimised visiting order."""
+        return self.destinations[0] if self.destinations else None
+
+    def _drop_destination(self, cell):
+        self.destinations.remove(cell)
+        entry = dict(step=self.step_index, kind='destino_descartado', label='Destino descartado',
+                     message=f'El destino {list(cell)} ya no tiene ruta segura: se descarta y se retoma la misión.',
+                     position=list(cell))
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+
+    def _tour(self, cells):
+        """Best order to visit ``cells`` from the current position, ending at a refuge.
+
+        Distances come from the believed map; the order is evolved by the
+        permutation GA. Returns (ordered cells, total cells including the return).
+        """
+        nodes = [self.position] + list(cells)
+        hops = lambda path: len(path) - 1 if path else math.inf
+        leg = [[0 if a == b else hops(self._bfs(a, b)) for b in nodes] for a in nodes]
+        closing = [hops(self._bfs(node, goals=set(self.world.refuges))) for node in nodes]
+        result = optimize_visit_order(leg, closing, seed=self.seed)
+        return [nodes[i + 1] for i in result['order']], result['cost']
+
+    def _order_destinations(self):
+        """Drop unreachable destinations and keep the rest in the best visiting order."""
+        for cell in [c for c in self.destinations if self._bfs(self.position, c) is None]:
+            self._drop_destination(cell)
+        if not self.destinations:
+            self.tour_cells = 0
+            return
+        order, self.tour_cells = self._tour(self.destinations)
+        if order != self.destinations and len(order) > 1:
+            entry = dict(step=self.step_index, kind='orden_destinos', label='Orden de visita optimizado',
+                         message='El AG de permutaciones ordenó los destinos: '
+                                 + ' → '.join(str(list(c)) for c in order)
+                                 + f' ({self.tour_cells} celdas con retorno al refugio).', position=None)
+            self.event_log.append(entry)
+            self.pending_events.append(entry)
+        self.destinations = order
+
+    def destination_tour(self):
+        """Cells joining the destinations in visiting order (the leg to the first is the route)."""
+        cells = [self.destinations[0]] if self.destinations else []
+        for a, b in zip(self.destinations, self.destinations[1:]):
+            cells += (self._bfs(a, b) or [a, b])[1:]
+        return cells
 
     def _plan_once(self, reason):
         started = time.perf_counter()
@@ -382,7 +480,7 @@ class HybridMission:
         planner = CachedPlanner(population_size=cfg['ga_population'], generations=cfg['ga_generations'], waypoints=3,
                                 seed=self.seed + self.metrics['ga_runs'], weights=cfg['weights'],
                                 crossover_rate=cfg['ga_crossover'], mutation_rate=cfg['ga_mutation'])
-        goal = self.home
+        goal = self.destination or self.home
         risk = self.risk_map()
         kwargs = dict(temperature=self.temperature_internal, thermal_limit=self.config['thermal_limit'],
                       energy_per_step=self.cell_cost(PLAN_SPEED))
@@ -422,6 +520,11 @@ class HybridMission:
     def _plan_greedy(self, reason):
         """Nearest-neighbour tour over remaining sites with a battery check (no GA)."""
         avoid = self._risk_avoid() if self.policy['rna'] else set()
+        if self.destination is not None:
+            self.route = self._bfs(self.position, self.destination, avoid) or self._bfs(self.position, self.destination) or [self.position]
+            self.ga = dict(reason=reason, mode='voraz', chosen=None, rejected=[], candidates=[], history=[],
+                           message='Ruta directa al destino del operador (sin AG).', science_order=[])
+            return
         remaining = sorted(self.belief.science_sites - self.done)
         position, route, order = self.position, [self.position], []
         cost = self.cell_cost(PLAN_SPEED)
@@ -470,12 +573,88 @@ class HybridMission:
                     best=round(entry['best_fitness'], 4))
 
     # ---------------------------------------------------------------- events
+    def _replan_now(self, reason):
+        """Replan at once (F9); before the first plan exists, just record the reason."""
+        if self.route is None:
+            self.replan_reason = reason
+            return False
+        self._plan(reason)
+        self.ga['step'] = self.step_index + 1  # logged with the next step record
+        return True
+
+    def _destination_cell(self, position):
+        try:
+            cell = tuple(int(v) for v in position)
+            assert len(cell) == 2
+        except (TypeError, ValueError, AssertionError):
+            raise ValueError('Destino inválido: se esperan (fila, columna).') from None
+        return cell
+
+    def remove_destination(self, position):
+        """Operator removes one destination; the rest are reordered."""
+        cell = self._destination_cell(position)
+        if cell not in self.destinations:
+            raise ValueError('No hay un destino fijado en esa celda.')
+        self.destinations.remove(cell)
+        entry = dict(step=self.step_index, kind='destino_cancelado', label='Destino cancelado',
+                     message=f'El operador quitó el destino {list(cell)}: quedan {len(self.destinations)}.',
+                     position=list(cell))
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+        self._replan_now('DESTINO_CANCELADO')
+        return entry
+
+    def set_destination(self, position):
+        """Add an operator destination (None clears them all).
+
+        Validated, planned with the same pipeline and never above safety. With
+        several destinations the visiting order is the shortest tour found by the GA.
+        """
+        if self.finished:
+            raise ValueError('La misión ya terminó: reinicie para fijar un destino.')
+        if position is None:
+            if not self.destinations:
+                raise ValueError('No hay destino fijado.')
+            entry = dict(step=self.step_index, kind='destino_cancelado', label='Destino cancelado',
+                         message='El operador quitó los destinos: se retoma la misión.', position=list(self.destinations[0]))
+            self.destinations, self.tour_cells = [], 0
+        else:
+            cell = self._destination_cell(position)
+            if not self.world.in_bounds(cell):
+                raise ValueError('Destino fuera del mapa.')
+            if cell == self.position:
+                raise ValueError('El rover ya está en esa celda.')
+            if cell in self.destinations:
+                raise ValueError('Ese destino ya está fijado.')
+            if len(self.destinations) >= MAX_DESTINATIONS:
+                raise ValueError(f'Máximo {MAX_DESTINATIONS} destinos a la vez.')
+            if not self.belief.traversable(cell, self.profile.mode):
+                raise ValueError('Destino inválido: la celda es un obstáculo o barranco conocido.')
+            if self._bfs(self.position, cell) is None:
+                raise ValueError('Destino inalcanzable: no existe ruta conocida hasta esa celda.')
+            order, cells = self._tour(self.destinations + [cell])
+            need = cells * self.cell_cost(PLAN_SPEED)
+            if need > self.battery:
+                raise ValueError('Destino rechazado: la energía no alcanza para visitar los destinos y volver a un refugio '
+                                 f'(se requiere {need:.1f} % y hay {self.battery:.1f} %): no hay retorno seguro.')
+            self.destinations.append(cell)
+            self.returning = False
+            entry = dict(step=self.step_index, kind='destino', label='Destino fijado',
+                         message=f'Destino del operador en {list(cell)}: {len(self.destinations)} destino(s), '
+                                 f'recorrido de {cells} celdas con retorno al refugio.', position=list(cell))
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+        self._replan_now(entry['kind'].upper())
+        return entry
+
     def inject(self, kind, **data):
         if self.finished:
             raise ValueError('La misión ya terminó: reinicie para inyectar eventos.')
         position = data.pop('position', None)
         event = Event(kind, data)
         kind = event.kind
+        if self.timers['link']:
+            self.queued_orders += 1  # operator order issued during the outage
         if position is not None:
             position = tuple(int(v) for v in position)
         if kind in ('barranco', 'meteorito', 'alienigena'):
@@ -520,26 +699,36 @@ class HybridMission:
                     if self.world.in_bounds(cell) and cell != self.position:
                         self.risk[cell] = max(self.risk.get(cell, 0.), .6)
             self.timers['vibration'] = 2
-            self.replan_reason = 'METEORITO'
+            if abs(position[0] - self.position[0]) + abs(position[1] - self.position[1]) <= 1:
+                self.health = max(0., self.health - METEORITE_DAMAGE)
         elif kind == 'sismo':
             self.wait_steps = 2
             self.timers['vibration'] = 3
-            self.replan_reason = 'SISMO'
+            self.health = max(0., self.health - QUAKE_DAMAGE)
+        elif kind == 'ola_calor':
+            self.timers['heat'] = HEAT_STEPS
+        elif kind == 'alienigena':
+            self.metrics['contacts'] += 1
         elif kind == 'tormenta_polvo':
             self.timers['storm'] = 15
         elif kind in ('dia', 'noche'):
             self.day_counter = 0
         elif kind == 'perdida_enlace':
-            self.timers['link'] = 10
+            self.timers['link'] = LINK_STEPS
         elif kind == 'biosenal_anomala':
             self.metrics['anomalies'] += 1
-        elif kind == 'viento' and self.profile.mode == 'probe':
-            self.wind_wait = 1
-            self.replan_reason = 'VIENTO'
+            self.battery = max(0., self.battery - BIOSIGNAL_ENERGY)  # spectrometer analysis
+        elif kind == 'viento':
+            self.timers['wind'] = WIND_STEPS
+            if self.profile.mode == 'probe':
+                self.wind_wait = 1
+        self.metrics['events'][kind] = self.metrics['events'].get(kind, 0) + 1
         entry = dict(step=self.step_index, kind=kind, label=EVENT_LABELS.get(kind, kind),
                      message=result.get('message', kind), position=list(position) if position else None)
         self.event_log.append(entry)
         self.pending_events.append(entry)
+        if kind in PERCEIVABLE_EVENTS:
+            entry['replanned'] = self._replan_now(kind.upper())  # F9: now, not on the next step
         return entry
 
     def _tick_environment(self):
@@ -552,9 +741,16 @@ class HybridMission:
             self.visibility = .2
         else:
             self.visibility = 1. if self.daylight else .6
-        for key in ('link', 'vibration'):
+        for key in ('vibration', 'heat', 'wind'):
             if self.timers[key]:
                 self.timers[key] -= 1
+        if self.timers['link']:
+            self.timers['link'] -= 1
+            self.metrics['link_outage_steps'] += 1
+            self.link_down_steps += 1
+            if not self.timers['link']:
+                self.link_down_steps = 0
+                self.queued_orders = 0  # queue is flushed when the link returns
         self.sensors.link_available = self.timers['link'] == 0
         for name in list(self.sensor_timers):
             self.sensor_timers[name] -= 1
@@ -565,6 +761,56 @@ class HybridMission:
             self.battery = min(100., self.battery + .12 * self.visibility)  # solar (supuesto)
         if self.profile.name == 'Venus':
             self.health = max(0., self.health - .4)  # corrosion (supuesto)
+
+    def _drone_scan(self):
+        """Scout drone: flies the next cells of the route and shares hazards with the rover.
+
+        It only reads what is physically there, never future events. Flight energy is
+        taken from the rover battery; it stays grounded in dust storms, strong wind
+        or below the battery reserve, and does not exist in probe mode.
+        """
+        if not self.config['drone']:
+            return
+        ahead = [tuple(c) for c in (self.route or [])[1:DRONE_AHEAD + 1]]
+        reason = None
+        if self.profile.mode != 'rover':
+            reason = 'La sonda atmosférica no lleva dron.'
+        elif self.timers['storm']:
+            reason = 'En tierra por la tormenta de polvo.'
+        elif self.timers['wind']:
+            reason = 'En tierra por el viento fuerte.'
+        elif self.battery < DRONE_RESERVE:
+            reason = f'En tierra: batería bajo la reserva de {DRONE_RESERVE:.0f} %.'
+        elif not ahead:
+            reason = 'En tierra: no hay ruta que explorar.'
+        if reason:
+            self.drone = dict(position=list(self.position), flying=False, reason=reason, scanned=[], found=[])
+            return
+        world, belief = self.world, self.belief
+        scan = {(r + dr, c + dc) for r, c in ahead for dr in (-1, 0, 1) for dc in (-1, 0, 1)}
+        scan = {cell for cell in scan if world.in_bounds(cell)}
+        cliffs = (world.cliffs & scan) - belief.cliffs
+        obstacles = (world.obstacles & scan) - belief.obstacles
+        found = sorted(cliffs | obstacles)
+        belief.cliffs |= cliffs
+        belief.obstacles |= obstacles
+        self.rna_marks -= cliffs | obstacles  # confirmed by the drone, no longer a revisable belief
+        self.battery = max(0., self.battery - DRONE_ENERGY)
+        self.metrics['drone_steps'] += 1
+        self.metrics['drone_energy'] += DRONE_ENERGY
+        self.metrics['drone_discoveries'] += len(found)
+        self.drone = dict(position=list(ahead[-1]), flying=True, reason=None,
+                          scanned=[list(c) for c in sorted(scan)], found=[list(c) for c in found])
+        if found:
+            blocked = [c for c in found if c in set(tuple(x) for x in self.route)]
+            entry = dict(step=self.step_index, kind='dron', label='Dron explorador',
+                         message=f'El dron detectó {len(cliffs)} barranco(s) y {len(obstacles)} obstáculo(s) adelante'
+                                 + (': la ruta pasaba por ahí y se recalcula.' if blocked else ', fuera de la ruta.'),
+                         position=list(found[0]), cells=[list(c) for c in found])
+            self.event_log.append(entry)
+            self.pending_events.append(entry)
+            if blocked and not self.replan_reason:
+                self.replan_reason = 'DRON_DETECTA_PELIGRO'
 
     # ------------------------------------------------------------------ step
     def step(self):
@@ -577,8 +823,9 @@ class HybridMission:
         self._tick_environment()
         if depleted:
             self.battery = 0.
+        self._drone_scan()
         complete = self.position in self.world.refuges and self.step_index > 1 and not self.returning and (
-            not (self.belief.science_sites - self.done) or self.nothing_left)
+            not (self.belief.science_sites - self.done) or self.nothing_left) and self.destination is None
         if not complete:
             if self.route is None or (self.replan_reason and self.replan_reason not in ('RECARGA_COMPLETA',)):
                 self._plan(self.replan_reason or 'INICIO')
@@ -696,6 +943,16 @@ class HybridMission:
                     self.world.visited_science.add(cell)
                     self.done.add(cell)
                     self.metrics['science_samples'] += 1
+                if cell in self.destinations:
+                    self.destinations.remove(cell)
+                    left = len(self.destinations)
+                    entry = dict(step=self.step_index, kind='destino_alcanzado', label='Destino alcanzado',
+                                 message=f'Destino {list(cell)} alcanzado: '
+                                         + (f'quedan {left} destino(s).' if left else 'se retoman los objetivos pendientes y el retorno.'),
+                                 position=list(cell))
+                    self.event_log.append(entry)
+                    self.pending_events.append(entry)
+                    self.replan_reason = 'DESTINO_ALCANZADO'
                 if cell in self.world.resources and cell not in self.recovered:
                     self.recovered.add(cell)
                     self.done.add(cell)
@@ -715,6 +972,8 @@ class HybridMission:
         if self.wind_wait and decision.reason == 'R16_ESPERA_VIENTO':
             self.wind_wait -= 1
         self.no_route_steps = self.no_route_steps + 1 if decision.reason == 'R10_SIN_RUTA' else 0
+        self.metrics['wait_steps'] += decision.reason in WAIT_REASONS
+        self.metrics['degraded_steps'] += not all(nav_valid.values())
 
         # 7. update mission state
         self.state = decision.state
@@ -750,7 +1009,7 @@ class HybridMission:
             vetoes=decision.vetoes, permitted_by=decision.permitted_by,
             sensors={k: readings.get(k) for k in ('distance', 'elevation_delta', 'slope', 'temperature_external',
                                                      'visibility', 'solar_power', 'pressure', 'oxygen_ambient',
-                                                     'radiation', 'link_available')},
+                                                     'radiation', 'link_available', 'vibration', 'wind_speed')},
             nav_valid=nav_valid, edge_cliff=edge,
             rna=None if rna is None else dict(label=rna['label'], confidence=round(rna['confidence'], 4),
                                               probabilities={k: round(v, 4) for k, v in rna['probabilities'].items()},
@@ -765,7 +1024,8 @@ class HybridMission:
                               if ga_now.get('chosen') is not None else None),
                 rejected=ga_now.get('rejected')),
             route=[list(c) for c in (self.route or [])[:12]], events=events,
-            science=round(self.world.science_progress, 3), seed=self.seed, operational_label=ASSUMPTION)
+            science=round(self.world.science_progress, 3), seed=self.seed,
+            event_count=sum(self.metrics['events'].values()), operational_label=ASSUMPTION)
         self.last = dict(record=record, rna=rna, fuzzy=fuzzy, decision=decision.to_dict(), readings=readings,
                          nav_valid=nav_valid, speed=speed)
         return record
@@ -791,6 +1051,10 @@ class HybridMission:
                     energy_used=round(m['energy_used'], 3), distance=m['distance'],
                     science=round(self.world.science_progress, 3), samples=m['science_samples'],
                     instruments=len(self.recovered), instruments_total=len(self.world.resources),
+                    events=dict(m['events']), events_total=sum(m['events'].values()),
+                    wait_steps=m['wait_steps'], degraded_steps=m['degraded_steps'],
+                    anomalies=m['anomalies'], contacts=m['contacts'], link_outage_steps=m['link_outage_steps'],
+                    drone_steps=m['drone_steps'], drone_discoveries=m['drone_discoveries'],
                     replans=m['replans'], ga_runs=m['ga_runs'], safety_violations=m['safety_violations'],
                     decision_ms=round(1000 * m['decision_seconds'] / max(1, self.step_index), 3),
                     planning_s=round(m['planning_seconds'], 3), health=round(self.health, 2))
