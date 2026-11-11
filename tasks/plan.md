@@ -39,7 +39,7 @@ y termina con un commit local. No se hace `git push` sin preguntar, porque publi
 ### Fase 3 · Eventos vivos y alertas
 - [ ] T7 (F3): eventos aleatorios en el motor
 - [ ] T8 (F3): control en el panel y valor por defecto 3 %
-- [ ] T9 (F2): alertas sobre el mapa
+- [x] T9 (F2): alertas sobre el mapa
 
 ### Punto de control C
 - [ ] Misión automática con eventos aleatorios y alertas, revisada en Chrome

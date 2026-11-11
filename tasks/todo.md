@@ -76,7 +76,7 @@ Comandos de verificación:
   - Verificar: en Chrome, misión automática con 10 % y con 0 %.
   - Depende de: T7 · Archivos: `web/index.html`, `server.py`, `src/ares/dashboard.py`, `build_site.py` · Tamaño: S
 
-- [ ] **T9 (F2) · Alertas sobre el mapa**
+- [x] **T9 (F2) · Alertas sobre el mapa**
   - Qué: franja superior con hasta 3 alertas, color por severidad, cierre automático a los 6 s y cierre manual para las críticas; fuentes: eventos, vetos y cambios de estado, fin de misión.
   - Aceptación: un barranco frente al rover muestra la alerta del evento y, al paso siguiente, la del veto `R04`; no hay scroll ni se tapan los controles de cámara.
   - Verificar: en Chrome a 1366×768 y a pantalla completa.

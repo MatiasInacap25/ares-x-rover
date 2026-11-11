@@ -67,6 +67,15 @@ input[type=range]{width:100%;accent-color:var(--amber);margin:0;height:14px}
 #ovLegend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .st-EXPLORACION{color:var(--ok)}.st-ALERTA,.st-REPLANIFICACION{color:var(--warn)}.st-REFUGIO{color:var(--blue)}
 .st-MODO_SEGURO,.st-FRACASO{color:var(--bad)}.st-EXITO{color:var(--ok)}.st-CONFIGURACION{color:var(--muted)}
+#alerts{position:absolute;z-index:6;top:44px;left:50%;transform:translateX(-50%);width:min(390px,38%);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.alert{pointer-events:auto;display:flex;gap:8px;align-items:flex-start;padding:6px 8px 6px 10px;border-radius:5px;border:1px solid var(--line2);border-left:4px solid var(--blue);background:rgba(14,9,6,.9);backdrop-filter:blur(3px);font-size:11px;line-height:1.35;animation:alertIn .22s ease-out}
+.alert b{display:block;font:700 12px var(--head);letter-spacing:.07em;text-transform:uppercase}
+.alert.warn{border-left-color:var(--warn)}.alert.warn b{color:var(--warn)}
+.alert.crit{border-left-color:var(--bad);border-color:var(--bad)}.alert.crit b{color:var(--bad)}
+.alert.ok{border-left-color:var(--ok)}.alert.ok b{color:var(--ok)}
+.alert div{flex:1;min-width:0}.alert button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+@keyframes alertIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.alert{animation:none}}
 #ovTime{left:8px;right:8px;bottom:6px;display:flex;gap:6px;align-items:center;padding:2px 8px;font:600 10.5px var(--mono)}
 #ovTime input{flex:1;min-width:60px;margin:0}
 #ovTime .btn{padding:1px 8px;font-size:10.5px}
@@ -135,6 +144,7 @@ canvas.fill{display:block;width:100%}
      <label class="btn c" title="Muestra peligros que el rover aún no descubrió"><input type="checkbox" id="fReveal" style="vertical-align:-2px;margin:0 3px 0 0">ocultos</label>
    </div>
    <div class="ov" id="ovState"><div class="st" id="sState">EN ESPERA</div><div class="ex" id="sExpl">Configure la misión y presione Iniciar.</div></div>
+   <div id="alerts" role="status" aria-live="polite"></div>
    <div class="ov" id="ovWhy"></div>
    <div class="ov" id="ovRace" title="Al terminar se ordena por: misión cumplida, ciencia, batería restante y colisiones"></div>
    <div class="ov" id="ovTime"><button class="btn c" id="tPrev" title="Paso anterior">◀</button><input type="range" id="tSlider" min="0" max="0" value="0" title="Línea de tiempo: arrastre para repetir la misión"><button class="btn c" id="tNext" title="Paso siguiente">▶</button><span id="tLabel">paso 0/0</span><button class="btn c on" id="tLive" title="Volver al presente">● En vivo</button></div>
@@ -272,7 +282,7 @@ let S=null, META=null, running=false, busy=false;
 function msg(t,err){ const m=$('msg'); m.textContent=t; m.className='msg'+(err?' err':''); }
 async function call(fn,args){
   if (busy && fn==='step') return null; busy=true;
-  try{ const out=await api(fn,args); if(out&&out.error){ msg(out.error,true); return null; } if(out&&out.status){ recordFrame(out); S=out; render(); } return out; }
+  try{ const out=await api(fn,args); if(out&&out.error){ msg(out.error,true); return null; } if(out&&out.status){ notify(out,S); recordFrame(out); S=out; render(); } return out; }
   catch(e){ msg('Error de comunicación con el motor Python: '+e,true); running=false; syncRun(); return null; }
   finally{ busy=false; }
 }
@@ -615,6 +625,23 @@ function renderRace(){ const G=S.ghosts||[], el=$('ovRace'); if(!G.length){ el.s
   const rows=[{policy:S.config.policy,battery:st.battery,science:st.science,state:st.state,finished:st.finished,collisions:S.metrics.collisions,main:true},...G];
   const done=rows.every(r=>r.finished), score=r=>(r.state==='EXITO'?1e6:0)+r.science*1e4+r.battery-r.collisions*500; if(done) rows.sort((a,b)=>score(b)-score(a));
   el.innerHTML=`<div class="rh">${done?'Resultado de la carrera':'Carrera de fantasmas'}</div><div class="rr small"><i></i><span style="text-align:left">política</span><span>bat.</span><span>ciencia</span><span>estado</span></div>`+rows.map((r,i)=>`<div class="rr"><i style="background:${r.main?'#e9e6df':GHOST_COL[r.policy]}"></i><b>${done?(i+1)+'. ':''}${GHOST_LBL[r.policy]||r.policy}${r.main?' · rover':''}</b><span>${fmt(r.battery,0)} %</span><span>${Math.round(r.science*100)} %</span><span class="st-${r.state}">${(r.state==='CONFIGURACION'?'EN ESPERA':r.state).replace('_',' ')}</span></div>`).join(''); }
+// ------------------------------------------------------------ alerts at the top of the map (F2)
+const ALERT_MS=6000, ALERT_MAX=3;
+const EVENT_SEV={barranco:'warn',meteorito:'warn',sismo:'warn',tormenta_polvo:'warn',viento:'warn',ola_calor:'warn',falla_sensor:'warn',perdida_enlace:'warn',bateria_baja:'warn',corrosion:'warn',alienigena:'warn',obstaculo:'warn',obstaculo_manual:'warn',destino_descartado:'warn',revision_rna:'warn',destino_alcanzado:'ok',instrumento:'ok'};
+const REASON_SEV={R00_RECURSOS_AGOTADOS:'crit',R01_LIMITE_TERMICO:'crit',R03_DANO_CRITICO:'crit',R06_REFUGIO_INALCANZABLE:'crit',R02_SENSORES_NAVEGACION_FALLIDOS:'warn',R04_VETO_BARRANCO_CONFIRMADO:'warn',R05_RNA_PELIGRO:'warn',R07_RETORNO_ENERGIA:'warn',R10_SIN_RUTA:'warn'};
+const REPEATING=new Set(['R04_VETO_BARRANCO_CONFIRMADO','R05_RNA_PELIGRO']);   // every veto is a new fact; the others alert once per change
+const EVENT_TEXT={barranco:'Barranco real en el terreno, oculto para el rover: debe descubrirlo con sus sensores.',tormenta_polvo:'Baja la visibilidad: el rover reduce la velocidad y recalcula la ruta.',sismo:'Vibración y daño leve: el rover frena, espera y vuelve a medir.',meteorito:'Impacto en el terreno: aparece un obstáculo y la ruta se recalcula.',viento:'Ráfaga fuerte: sube el consumo y la ruta se recalcula.',ola_calor:'Sube la temperatura: más consumo y menor velocidad; ruta recalculada.',bateria_baja:'Cae la energía disponible: se recalcula la ruta priorizando el refugio.',falla_sensor:'Un sensor queda fuera de servicio: avance conservador con los restantes.',perdida_enlace:'Sin enlace con el operador: el rover sigue de forma autónoma.',biosenal_anomala:'Anomalía registrada para análisis. No confirma vida.',alienigena:'Evento narrativo ficticio: se registra el contacto y se evita la zona.',dia:'Amanece: mejora la visibilidad y vuelve la recarga solar.',noche:'Anochece: baja la visibilidad y se detiene la recarga solar.',corrosion:'La integridad baja por corrosión.'};
+function pushAlert(sev,title,text){ const box=$('alerts'), el=document.createElement('div'); el.className='alert '+sev;
+  const body=document.createElement('div'), b=document.createElement('b'), x=document.createElement('button'); b.textContent=title; body.append(b,document.createTextNode(text)); x.textContent='×'; x.title='Cerrar'; x.setAttribute('aria-label','Cerrar alerta'); x.onclick=()=>el.remove();
+  el.append(body,x); box.append(el); while(box.children.length>ALERT_MAX) box.firstElementChild.remove();
+  if(sev!=='crit') setTimeout(()=>el.remove(),ALERT_MS); }
+function notify(o,prev){ const feed=o.event_feed; if(!feed) return;
+  if(!prev||o.status.step===0&&feed.total<(prev.event_feed||{total:0}).total||o.config.seed!==prev.config.seed||o.planet.name!==prev.planet.name){ if(prev) $('alerts').replaceChildren(); return; }   // first load or a new mission: nothing to announce
+  const fresh=Math.min(feed.recent.length,Math.max(0,feed.total-(prev.event_feed||{total:feed.total}).total));
+  feed.recent.slice(feed.recent.length-fresh).forEach(e=>pushAlert(EVENT_SEV[e.kind]||'info',e.label,/^Evento aplicado/.test(e.message)&&EVENT_TEXT[e.kind]?EVENT_TEXT[e.kind]:e.message));
+  const r=o.decision&&o.decision.reason, pr=prev.decision&&prev.decision.reason;
+  if(r&&REASON_SEV[r]&&o.status.step!==prev.status.step&&(r!==pr||REPEATING.has(r))) pushAlert(REASON_SEV[r],r.replace(/_/g,' '),o.decision.explanation||(META.reasons||{})[r]||'');
+  if(o.status.finished&&!prev.status.finished) pushAlert(o.status.state==='EXITO'?'ok':'crit','Fin de misión',o.status.outcome||''); }
 // ------------------------------------------------------------ replay with timeline (F15)
 let frames=[], replayAt=null;
 function recordFrame(o){ const n=o.status.step; if(n===0||n<frames.length-1) frames=[]; frames[n]=o; frames.length=n+1; replayAt=null; }
@@ -623,6 +650,7 @@ function seek(i){ if(!frames.length) return; running=false; syncRun(); const las
   replayAt=i>=last?null:i; S=frames[i]; lastPos=null; V.anim&&(V.anim.queue=[]); render(); }
 function renderTimeline(){ const last=Math.max(0,frames.length-1), at=replayAt===null?last:replayAt, sl=$('tSlider'); sl.min=firstFrame(); sl.max=last; sl.value=at;
   $('tLabel').textContent=`paso ${at}/${last}`; $('tLive').classList.toggle('on',replayAt===null); $('tLive').textContent=replayAt===null?'● En vivo':'Volver al presente'; $('ovTime').classList.toggle('replay',replayAt!==null);
+  $('alerts').style.display=replayAt===null?'flex':'none';
   const why=$('ovWhy'); if(replayAt===null){ why.style.display='none'; return; } why.style.display='block';
   const L=S.log.length&&S.log[S.log.length-1].step===S.status.step?S.log[S.log.length-1]:null;
   why.innerHTML=`<b>REPETICIÓN · PASO ${at}</b> · ¿por qué hizo esto?<br>`+(L?`<span class="mono">${L.reason}</span> → ${L.action}. ${L.explanation||(META.reasons||{})[L.reason]||''}<br><span class="small">RNA: ${L.rna||'—'}${L.conf!=null?' ('+fmt(L.conf*100,0)+' %)':''} · velocidad difusa ${L.speed!=null?fmt(L.speed,2):'—'} · batería ${fmt(L.battery,1)} %${(L.events||[]).length?' · eventos: '+L.events.join(', '):''}</span>`:'Inicio de la misión: ruta inicial planificada, aún sin decisiones.'); }

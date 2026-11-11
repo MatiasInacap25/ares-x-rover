@@ -7,6 +7,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from ares.api import Session  # noqa: E402
 
 
+def test_snapshot_feeds_new_events_to_the_alert_strip():
+    session = Session(seed=42)
+    before = session.dispatch('step', {})['event_feed']['total']
+    feed = session.dispatch('inject', {'kind': 'tormenta_polvo'})['event_feed']
+    assert feed['total'] == before + 1
+    assert feed['recent'][-1]['kind'] == 'tormenta_polvo' and feed['recent'][-1]['label'] and feed['recent'][-1]['message']
+
+
 def test_ghost_mode_is_off_by_default():
     assert Session(seed=42).dispatch('state')['ghosts'] == []
 
