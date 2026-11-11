@@ -45,9 +45,12 @@ y termina con un commit local. No se hace `git push` sin preguntar, porque publi
 - [ ] Misión automática con eventos aleatorios y alertas, revisada en Chrome
 
 ### Fase 4 · Control del operador y cierre
-- [ ] T10 (F6): destino en el motor
-- [ ] T11 (F6): destino en el panel
+- [x] T10 (F6): destino en el motor
+- [x] T11 (F6): destino en el panel
 - [ ] T12 (F1): animación de viaje
+- [x] T14 (F10): vista 2D y 3D
+- [x] T15 (F11): terreno con forma de superficie planetaria
+- [x] T16 (F12): ediciones del operador visibles
 - [ ] T13: documentación, notebook, sitio y verificación final
 
 ### Punto de control final

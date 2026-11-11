@@ -22,6 +22,9 @@ Ocho cambios pedidos:
 | F7 | Velocidad base más lenta en modo automático y opciones ×0,75 y ×0,5 | Panel |
 | F8 | Nuevo evento: ola de calor | Motor + panel |
 | F9 | La ruta se actualiza en el momento del evento, no en el paso siguiente | Motor |
+| F10 | Cambiar entre vista 2D y 3D | Panel |
+| F11 | Terreno con forma de superficie planetaria (curvo, sin cerros en los bordes) | Panel |
+| F12 | Las ediciones del operador (barranco, obstáculo) se ven al colocarlas | Panel |
 
 ## Supuestos (corrígelos antes de aprobar)
 
@@ -124,6 +127,23 @@ Regla: todo evento debe cambiar al menos un valor numérico visible en telemetr�
   - inyectar un barranco no cambia la ruta hasta que el sensor de borde lo confirma;
   - la traza sigue siendo reproducible con la misma semilla y la misma secuencia de eventos.
 
+### F10 · Vista 2D y 3D
+- Un selector "2D / 3D" en los controles de cámara cambia la vista del mapa sin reiniciar la misión.
+- La vista 2D es un mapa cenital plano con los mismos elementos que la 3D: relieve, obstáculos, barrancos, riesgo RNA, sitios científicos, instrumentos, refugios, ruta planificada, recorrido, candidatas del AG, destino y rover.
+- Las herramientas de clic (editar terreno, fijar destino) funcionan igual en las dos vistas.
+- **Aceptación:** al cambiar de 3D a 2D y volver, la misión conserva su paso y su ruta; un clic en 2D con "Fijar destino" fija la misma celda que mostraría la 3D.
+
+### F11 · Terreno con forma de superficie planetaria
+- El terreno se curva como la superficie de un planeta: cae suavemente hacia el horizonte en todas las direcciones y ya no tiene cerros levantados en los bordes del mapa.
+- El relieve interno se suaviza; los barrancos siguen viéndose como depresiones.
+- No cambia el motor: la cuadrícula, las alturas y las rutas son las mismas.
+- **Aceptación:** en la vista general se ve el horizonte curvo y ninguna zona fuera de la cuadrícula queda más alta que el mapa.
+
+### F12 · Ediciones del operador visibles
+- Un barranco u obstáculo colocado por el operador se marca en el mapa (2D y 3D) en el momento, con un contorno propio, aunque el rover todavía no lo haya detectado.
+- El mensaje de confirmación indica la celda y que el rover debe descubrirlo con sus sensores.
+- **Aceptación:** tras colocar un barranco, la celda queda marcada sin activar "ocultos" y sin dar ningún paso.
+
 ### F1 · Viaje entre planetas
 - Al elegir un planeta distinto y válido, se muestra una animación de unos 3 segundos sobre el área del mapa: el planeta de origen se aleja, una nave cruza el espacio y aparece el planeta de destino; después se muestra el terreno nuevo.
 - Un clic salta la animación.
@@ -201,6 +221,7 @@ def inject(self, kind, **data):
 
 ## Decisiones tomadas (2026-11-10)
 
+- **F10, F11, F12:** agregados a pedido del usuario durante la fase 2. "Plano u ovalado" se resuelve como superficie curva tipo planeta. El destino (F6) se adelanta antes que los eventos aleatorios.
 - **F8:** en Venus la ola de calor termina la misión en modo seguro por límite térmico (el margen es de 5,6 °C). Se deja así.
 
 - **F3:** 3 % por paso, activo por defecto en el panel. Aprobado.

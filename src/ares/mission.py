@@ -200,6 +200,7 @@ class HybridMission:
         self.link_down_steps = 0
         self.queued_orders = 0
         self.sensor_timers = {}
+        self.destination = None  # operator-defined waypoint (F6)
         self.day_counter = 0
         self.no_route_steps = 0
         self.nothing_left = False
@@ -372,6 +373,15 @@ class HybridMission:
             self.event_log.append(entry)
             self.pending_events.append(entry)
             self._plan_once(reason + '+REVISION_RNA')
+        if len(self.route) <= 1 and self.destination is not None and not self.returning:
+            # The destination became unreachable (new hazard or low energy): drop it and resume.
+            entry = dict(step=self.step_index, kind='destino_descartado', label='Destino descartado',
+                         message=f'El destino {list(self.destination)} ya no tiene ruta segura: se descarta y se retoma la misión.',
+                         position=list(self.destination))
+            self.destination = None
+            self.event_log.append(entry)
+            self.pending_events.append(entry)
+            self._plan_once(reason + '+SIN_DESTINO')
         if len(self.route) <= 1 and not self.returning and self.position not in self.world.refuges:
             # No feasible exploration plan (typically low energy): head for the nearest
             # reachable refuge instead of waiting without a route.
@@ -414,7 +424,7 @@ class HybridMission:
         planner = CachedPlanner(population_size=cfg['ga_population'], generations=cfg['ga_generations'], waypoints=3,
                                 seed=self.seed + self.metrics['ga_runs'], weights=cfg['weights'],
                                 crossover_rate=cfg['ga_crossover'], mutation_rate=cfg['ga_mutation'])
-        goal = self.home
+        goal = self.destination or self.home
         risk = self.risk_map()
         kwargs = dict(temperature=self.temperature_internal, thermal_limit=self.config['thermal_limit'],
                       energy_per_step=self.cell_cost(PLAN_SPEED))
@@ -454,6 +464,11 @@ class HybridMission:
     def _plan_greedy(self, reason):
         """Nearest-neighbour tour over remaining sites with a battery check (no GA)."""
         avoid = self._risk_avoid() if self.policy['rna'] else set()
+        if self.destination is not None:
+            self.route = self._bfs(self.position, self.destination, avoid) or self._bfs(self.position, self.destination) or [self.position]
+            self.ga = dict(reason=reason, mode='voraz', chosen=None, rejected=[], candidates=[], history=[],
+                           message='Ruta directa al destino del operador (sin AG).', science_order=[])
+            return
         remaining = sorted(self.belief.science_sites - self.done)
         position, route, order = self.position, [self.position], []
         cost = self.cell_cost(PLAN_SPEED)
@@ -502,6 +517,55 @@ class HybridMission:
                     best=round(entry['best_fitness'], 4))
 
     # ---------------------------------------------------------------- events
+    def _replan_now(self, reason):
+        """Replan at once (F9); before the first plan exists, just record the reason."""
+        if self.route is None:
+            self.replan_reason = reason
+            return False
+        self._plan(reason)
+        self.ga['step'] = self.step_index + 1  # logged with the next step record
+        return True
+
+    def set_destination(self, position):
+        """Operator waypoint: validated, planned with the same pipeline, never above safety."""
+        if self.finished:
+            raise ValueError('La misión ya terminó: reinicie para fijar un destino.')
+        if position is None:
+            if self.destination is None:
+                raise ValueError('No hay destino fijado.')
+            entry = dict(step=self.step_index, kind='destino_cancelado', label='Destino cancelado',
+                         message='El operador quitó el destino: se retoma la misión.', position=list(self.destination))
+            self.destination = None
+        else:
+            try:
+                cell = tuple(int(v) for v in position)
+                assert len(cell) == 2
+            except (TypeError, ValueError, AssertionError):
+                raise ValueError('Destino inválido: se esperan (fila, columna).') from None
+            if not self.world.in_bounds(cell):
+                raise ValueError('Destino fuera del mapa.')
+            if cell == self.position:
+                raise ValueError('El rover ya está en esa celda.')
+            if not self.belief.traversable(cell, self.profile.mode):
+                raise ValueError('Destino inválido: la celda es un obstáculo o barranco conocido.')
+            out = self._bfs(self.position, cell)
+            if out is None:
+                raise ValueError('Destino inalcanzable: no existe ruta conocida hasta esa celda.')
+            back = self._bfs(cell, goals=set(self.world.refuges))
+            cells = len(out) - 1 + (len(back) - 1 if back else math.inf)
+            need = cells * self.cell_cost(PLAN_SPEED)
+            if need > self.battery:
+                raise ValueError('Destino rechazado: la energía no alcanza para ir y volver a un refugio '
+                                 f'(se requiere {need:.1f} % y hay {self.battery:.1f} %): no hay retorno seguro.')
+            self.destination = cell
+            self.returning = False
+            entry = dict(step=self.step_index, kind='destino', label='Destino fijado',
+                         message=f'Destino del operador en {list(cell)}: {len(out) - 1} celdas de ida.', position=list(cell))
+        self.event_log.append(entry)
+        self.pending_events.append(entry)
+        self._replan_now(entry['kind'].upper())
+        return entry
+
     def inject(self, kind, **data):
         if self.finished:
             raise ValueError('La misión ya terminó: reinicie para inyectar eventos.')
@@ -583,12 +647,7 @@ class HybridMission:
         self.event_log.append(entry)
         self.pending_events.append(entry)
         if kind in PERCEIVABLE_EVENTS:
-            if self.route is None:
-                self.replan_reason = kind.upper()      # not planned yet: the first plan covers it
-            else:
-                self._plan(kind.upper())               # F9: replan now, not on the next step
-                self.ga['step'] = self.step_index + 1  # logged with the next step record
-                entry['replanned'] = True
+            entry['replanned'] = self._replan_now(kind.upper())  # F9: now, not on the next step
         return entry
 
     def _tick_environment(self):
@@ -634,7 +693,7 @@ class HybridMission:
         if depleted:
             self.battery = 0.
         complete = self.position in self.world.refuges and self.step_index > 1 and not self.returning and (
-            not (self.belief.science_sites - self.done) or self.nothing_left)
+            not (self.belief.science_sites - self.done) or self.nothing_left) and self.destination is None
         if not complete:
             if self.route is None or (self.replan_reason and self.replan_reason not in ('RECARGA_COMPLETA',)):
                 self._plan(self.replan_reason or 'INICIO')
@@ -752,6 +811,14 @@ class HybridMission:
                     self.world.visited_science.add(cell)
                     self.done.add(cell)
                     self.metrics['science_samples'] += 1
+                if cell == self.destination:
+                    entry = dict(step=self.step_index, kind='destino_alcanzado', label='Destino alcanzado',
+                                 message=f'Destino {list(cell)} alcanzado: se retoman los objetivos pendientes y el retorno.',
+                                 position=list(cell))
+                    self.destination = None
+                    self.event_log.append(entry)
+                    self.pending_events.append(entry)
+                    self.replan_reason = 'DESTINO_ALCANZADO'
                 if cell in self.world.resources and cell not in self.recovered:
                     self.recovered.add(cell)
                     self.done.add(cell)

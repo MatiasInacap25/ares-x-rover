@@ -91,13 +91,13 @@ Comandos de verificación:
 
 ## Fase 4 · Control del operador y cierre
 
-- [ ] **T10 (F6) · Destino en el motor**
+- [x] **T10 (F6) · Destino en el motor**
   - Qué: comando para fijar destino; validación (fuera del mapa, obstáculo o barranco conocido, sin ruta, energía insuficiente para ir y volver); el AG planifica hacia el destino; al llegar se registra y la misión continúa.
   - Aceptación: un destino válido cambia la ruta y el rover pasa por la celda; sobre un barranco conocido devuelve error sin cambiar la ruta; con batería insuficiente se rechaza explicando que no hay retorno seguro.
   - Verificar: tests nuevos en rojo y luego en verde; suite completa.
   - Depende de: T6 · Archivos: `src/ares/mission.py`, `src/ares/api.py`, `tests/test_h3_hybrid.py` · Tamaño: M
 
-- [ ] **T11 (F6) · Destino en el panel**
+- [x] **T11 (F6) · Destino en el panel**
   - Qué: herramienta "Fijar destino" con clic en el mapa 3D; marcador en 3D y en el minimapa; distancia restante en telemetría.
   - Aceptación: al hacer clic, la ruta se redibuja hacia el marcador; los rechazos muestran el mensaje del motor.
   - Verificar: en Chrome, fijar un destino válido y uno sobre un obstáculo.
@@ -114,6 +114,18 @@ Comandos de verificación:
   - Aceptación: los cuatro criterios de éxito del spec.
   - Verificar: suite completa; notebook ejecutado sin errores; versión web local carga y simula; página sin scroll a 1366×768 y 1920×1080.
   - Depende de: T1 a T12 · Archivos: `README.md`, `ARES_X_Rover.ipynb`, `site/` · Tamaño: S
+
+- [x] **T14 (F10) · Vista 2D y 3D** (agregada el 2026-11-10 a pedido del usuario)
+  - Aceptación: al cambiar de vista la misión conserva paso y ruta; un clic en 2D fija la misma celda que en 3D.
+  - Verificado en Chrome. Archivos: `web/index.html`
+
+- [x] **T15 (F11) · Terreno con forma de superficie planetaria**
+  - Aceptación: horizonte curvo y ninguna zona fuera de la cuadrícula más alta que el mapa.
+  - Verificado en Chrome (máximo dentro 0,86; máximo fuera −0,46). Archivos: `web/index.html`
+
+- [x] **T16 (F12) · Ediciones del operador visibles**
+  - Aceptación: un barranco colocado queda marcado sin activar "ocultos" y sin dar un paso.
+  - Verificado en Chrome. Archivos: `web/index.html`
 
 ### Punto de control final
 - [ ] Criterios de éxito del spec cumplidos
