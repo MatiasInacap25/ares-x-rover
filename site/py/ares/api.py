@@ -187,6 +187,7 @@ class Session:
                     split_maps=perception.report_['split_maps'],
                     train_seconds=_r(getattr(perception, 'train_seconds_', None), 2)),
             drone=m.drone, ghosts=self.ghost_view(),
+            policy_uses={k: m.policy[k] for k in ('rna', 'fuzzy', 'ga')},
             event_feed=dict(total=len(m.event_log),
                             recent=[dict(step=e['step'], kind=e['kind'], label=e['label'], message=e.get('message') or '')
                                     for e in m.event_log[-12:]]),

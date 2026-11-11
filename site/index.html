@@ -781,7 +781,10 @@ $('fzSets').addEventListener('click',e=>{ if(!META) return; const r=$('fzSets').
   const set=META.fuzzy_sets[v[0]]; const lo=set.x[0], hi=set.x[set.x.length-1]; const t=Math.max(0,Math.min(1,(e.clientX-r.left-8)/(r.width-16)));
   fzInputs[v[0]]=+(lo+(hi-lo)*t).toFixed(1); if(fzMode==='live'&&S&&S.fuzzy) Object.assign(fzInputs,{...S.fuzzy.inputs,[v[0]]:fzInputs[v[0]]}); setFZ('test'); });
 function renderFuzzy(){ if(!META||!S) return; const F=fzMode==='test'?fzTest:S.fuzzy;
-  $('fzSub').textContent=F?`${F.rules.length}/${F.all_rules.length} reglas activas · v=${fmt(F.speed,2)}`:'desactivada en esta política';
+  // three states: inference shown, inference pending (policy uses fuzzy), controller disabled by the policy
+  const disabled=fzMode==='live'&&S.policy_uses&&!S.policy_uses.fuzzy;
+  const pending=fzMode==='test'?'Prueba: evaluando…':S.status.step===0?'Sin inferencia todavía: ejecute un paso.':'Sin inferencia difusa en este paso.';
+  $('fzSub').textContent=F?`${F.rules.length}/${F.all_rules.length} reglas activas · v=${fmt(F.speed,2)}`:disabled?'desactivada en esta política':pending;
   const c=$('fzSets'), [g,w,h]=ctx2d(c); const rh=h/4;
   FZV.forEach(([k,lbl,u],i)=>{ const set=META.fuzzy_sets[k], y0=i*rh, xs=set.x, lo=xs[0], hi=xs[xs.length-1]; const X=v=>8+(w-16)*(v-lo)/(hi-lo), Y=v=>y0+rh-12-(rh-26)*v;
     g.strokeStyle='#2b2119'; g.beginPath(); g.moveTo(8,y0+rh-12); g.lineTo(w-8,y0+rh-12); g.stroke();
@@ -797,11 +800,11 @@ function renderFuzzy(){ if(!META||!S) return; const F=fzMode==='test'?fzTest:S.f
   Object.entries(sp.sets).forEach(([name,ys],j)=>{ g2.strokeStyle=FZC[j]+'88'; g2.lineWidth=1; g2.beginPath(); ys.forEach((yv,n)=>{ n?g2.lineTo(X(sp.x[n]),Y(yv)):g2.moveTo(X(sp.x[n]),Y(yv)); }); g2.stroke(); g2.fillStyle=FZC[j]; g2.font='9.5px Barlow'; g2.fillText(name,12+j*((w2-24)/4),h2-1); });
   if(F&&F.curve&&F.curve.length){ g2.fillStyle='rgba(255,192,77,.35)'; g2.strokeStyle=css('--amber'); g2.lineWidth=1.8; g2.beginPath(); g2.moveTo(X(0),Y(0)); F.curve.forEach((v,n)=>g2.lineTo(X(n/(F.curve.length-1)),Y(v))); g2.lineTo(X(1),Y(0)); g2.closePath(); g2.fill(); g2.stroke();
     const xc=X(F.centroid); g2.strokeStyle='#fff'; g2.lineWidth=2; g2.beginPath(); g2.moveTo(xc,4); g2.lineTo(xc,h2-12); g2.stroke(); g2.fillStyle='#fff'; g2.font='600 10.5px JetBrains Mono'; g2.fillText(`centroide ${fmt(F.centroid,3)} → velocidad`,Math.min(xc+5,w2-190),12); }
-  else { g2.fillStyle=css('--muted'); g2.font='11px Barlow'; g2.fillText(F&&F.reason==='SIN_REGLAS_ACTIVAS'?F.fallback:'Sin inferencia todavía.',10,22); }
+  else { g2.fillStyle=css('--muted'); g2.font='11px Barlow'; g2.fillText(F&&F.reason==='SIN_REGLAS_ACTIVAS'?F.fallback:disabled?'Política sin lógica difusa: velocidad fija 0,50.':pending,10,22); }
   const act=new Map((F?F.rules:[]).map(r=>[r.id,r.strength])); const rules=(F?F.all_rules:null)||(META.rules_fz||[]);
   const VAR={distance:'distancia',battery:'batería',slope:'pendiente',temperature:'temperatura'};
   $('fzRules').innerHTML=(F?F.all_rules:[]).slice().sort((a,b)=>(act.get(b.id)||0)-(act.get(a.id)||0)).map(r=>`<div class="rule ${act.has(r.id)?'act':''}"><b>R${r.id}</b><span>SI ${r.antecedents.map(([v,s])=>`${VAR[v]} <i>${s}</i>`).join(' Y ')} → <i>${r.consequent}</i></span><b>${act.has(r.id)?fmt(act.get(r.id),2):'0'}</b></div>`).join('')
-    ||'<div class="small">Política sin lógica difusa: velocidad fija 0,50.</div>'; }
+    ||`<div class="small">${disabled?'Política sin lógica difusa: velocidad fija 0,50.':pending}</div>`; }
 
 // ------------------------------------------------------------ F · genetic algorithm
 let gaRunSel=null, gaRunData=null, gaParamsBuilt=false;
