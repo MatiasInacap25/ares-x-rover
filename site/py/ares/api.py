@@ -339,7 +339,9 @@ class Session:
 
     def cmd_ga_run(self, run=None):
         index, record = self.mission.ga_run(run)
-        return clean(dict(run=index, ga=ga_view(record['ga'])))
+        view = ga_view(record['ga'])
+        view['routes'] = [c['route'] for c in record['ga'].get('candidates', [])]  # for the minimap
+        return clean(dict(run=index, ga=view))
 
     def cmd_compare(self, seeds=5, scenario='estandar', policies=None):
         if scenario not in SCENARIOS:

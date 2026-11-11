@@ -819,7 +819,7 @@ $('bGaApply').addEventListener('click',async()=>{ const args={...formConfig(),we
   running=false; syncRun(); const o=await call('configure',args); if(o){ gaRunSel=null; msg('Parámetros del AG aplicados; misión reiniciada con la misma semilla.'); } });
 $('fRun').addEventListener('change',()=>{ gaRunSel=+$('fRun').value; $('fGen').value=5; renderGA(true); });
 $('fGen').addEventListener('input',()=>{ clearTimeout(window._gt); window._gt=setTimeout(gaGen,70); });
-async function gaGen(){ if(!S||!(S.ga_runs||[]).length){ $('gaChrom').innerHTML=''; $('gaOps').textContent=''; return; }
+async function gaGen(){ if(!S||!(S.ga_runs||[]).length){ $('gaChrom').innerHTML=''; $('gaOps').textContent=''; $('gaGenLbl').textContent='—'; return; }
   const o=await api('ga_generation',{generation:+$('fGen').value,...(gaRunSel===null?{}:{run:gaRunSel})}); if(o.error) return;
   $('gaGenLbl').textContent=`${o.generation}/${o.total-1}`; $('gaOps').textContent=`torneos ${o.tournaments} · cruces ${o.crossovers} · genes mutados ${o.mutations} · élite 2 · mejor ${fmt(o.best,3)}`;
   $('gaChrom').innerHTML='<table class="mt"><tr><th>#</th><th>cromosoma (puntos de paso)</th><th>fitness</th><th></th></tr>'+o.rows.slice(0,5).map((r,i)=>`<tr><td>${i}</td><td>${r.chromosome.map(p=>`(${p})`).join('→')}</td><td>${fmt(r.fitness,3)}</td><td>${r.feasible?'<span class="pill ok">ok</span>':`<span class="pill bad">${r.violations[0]}</span>`}</td></tr>`).join('')+'</table>'; }
@@ -838,7 +838,7 @@ async function renderGA(force){ if(!S) return; if(!gaParamsBuilt) buildGaParams(
   M.obstacles.forEach(([r,c])=>{ g.fillStyle='#8a6a4c'; g.fillRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2); }); M.cliffs.forEach(([r,c])=>{ g.fillStyle='#c0392b'; g.fillRect(ox+c*cs,oy+r*cs,cs,cs); });
   const P=(cells,col,lw)=>{ if(!cells||cells.length<2) return; g.strokeStyle=col; g.lineWidth=lw; g.beginPath(); cells.forEach(([r,c],i)=>{ const X=ox+c*cs+cs/2, Y=oy+r*cs+cs/2; i?g.lineTo(X,Y):g.moveTo(X,Y); }); g.stroke(); };
   if(gaRunSel===null){ (M.candidates||[]).forEach((rt,i)=>{ if(i!==M.chosen) P(rt,'rgba(181,140,255,.6)',1); }); P(M.route,'#ffd84a',2); }
-  else cands.forEach(cnd=>{ P(cnd.science_order&&cnd.chromosome?null:null); });
+  else { const R=G.routes||[]; R.forEach((rt,i)=>{ if(i!==G.chosen) P(rt,'rgba(181,140,255,.6)',1); }); P(R[G.chosen],'#ffd84a',2); } // routes of the selected past run
   M.science.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#ffd84a'; g.beginPath(); g.arc(ox+c*cs+cs/2,oy+r*cs+cs/2,cs*.32,0,7); g.fill(); });
   M.resources.forEach(([r,c,d])=>{ g.fillStyle=d?'#52d58e':'#5aa9ff'; g.fillRect(ox+c*cs+cs*.25,oy+r*cs+cs*.25,cs*.5,cs*.5); });
   M.refuges.forEach(([r,c])=>{ g.strokeStyle='#52d58e'; g.lineWidth=1.5; g.strokeRect(ox+c*cs+1,oy+r*cs+1,cs-2,cs-2); });

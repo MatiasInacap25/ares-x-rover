@@ -509,6 +509,7 @@ class HybridMission:
             weights=dict(planner.weights))
         self.ga_runs.append(dict(ga=self.ga, raw=self.ga_history_raw, ctx=self.ga_context,
                                  belief=(set(self.belief.obstacles), set(self.belief.cliffs)),
+                                 visited=set(self.belief.visited_science),
                                  step=self.step_index))
 
     def ga_run(self, run=None):
@@ -561,6 +562,7 @@ class HybridMission:
         snapshot = World.__new__(World)
         snapshot.__dict__.update(self.belief.__dict__)
         snapshot.obstacles, snapshot.cliffs = set(record['belief'][0]), set(record['belief'][1])
+        snapshot.visited_science = set(record['visited'])  # science reward depends on what was still pending
         rows = []
         for chromosome in entry['chromosomes'][:8]:
             result = ctx['planner'].evaluate(chromosome, snapshot, ctx['start'], ctx['goal'], ctx['battery'],
