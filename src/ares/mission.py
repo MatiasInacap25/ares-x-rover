@@ -39,12 +39,21 @@ FIXED_RISK = .15          # constant estimated risk for the 'ag_puro' baseline
 DAY_LENGTH = 30           # steps per half day/night cycle (supuesto)
 MAX_STEPS = 400
 INSTRUMENT_BATTERY = 5.   # battery recovered with each instrument cache (supuesto)
+# Event effects (all values are simulation assumptions).
+HEAT_STEPS, HEAT_EXTERNAL, HEAT_INTERNAL, HEAT_ENERGY = 12, 40., 35., 1.2
+WIND_STEPS, WIND_ENERGY, WIND_SPEED = 5, 1.3, 22.
+LINK_STEPS = 10
+QUAKE_DAMAGE, METEORITE_DAMAGE, BIOSIGNAL_ENERGY, VIBRATION_LEVEL = 3., 5., 1., 2.5
+# Events the rover perceives at once: the route is recomputed when they happen (F9).
+# Hidden hazards (cliff, alien, manual obstacle) are discovered later by the sensors.
+PERCEIVABLE_EVENTS = ('meteorito', 'sismo', 'viento', 'bateria_baja', 'ola_calor', 'tormenta_polvo')
+WAIT_REASONS = ('R02_SENSORES_NAVEGACION_FALLIDOS', 'R08_ESPERA_SISMO', 'R12_DIFUSO_PARAR', 'R16_ESPERA_VIENTO')
 EVENT_LABELS = {
     'barranco': 'Barranco', 'bateria_baja': 'Batería baja', 'dia': 'Día', 'noche': 'Noche',
     'sismo': 'Sismo', 'meteorito': 'Meteorito', 'tormenta_polvo': 'Tormenta de polvo',
     'corrosion': 'Corrosión', 'biosenal_anomala': 'Señal biológica anómala',
     'alienigena': 'Objeto/ser alienígena (ficción)', 'falla_sensor': 'Falla de sensor',
-    'perdida_enlace': 'Pérdida de enlace', 'viento': 'Ráfaga de viento',
+    'perdida_enlace': 'Pérdida de enlace', 'viento': 'Ráfaga de viento', 'ola_calor': 'Ola de calor',
 }
 
 _NN_CACHE = {}
@@ -187,7 +196,9 @@ class HybridMission:
         self.finished = False
         self.outcome = None
         self.replan_reason = 'INICIO'
-        self.timers = {'storm': 0, 'link': 0, 'vibration': 0}
+        self.timers = {'storm': 0, 'link': 0, 'vibration': 0, 'heat': 0, 'wind': 0}
+        self.link_down_steps = 0
+        self.queued_orders = 0
         self.sensor_timers = {}
         self.day_counter = 0
         self.no_route_steps = 0
@@ -197,7 +208,8 @@ class HybridMission:
         self.last = {}
         self.metrics = dict(collisions=0, cliffs_avoided=0, hazards_avoided=0, replans=0, ga_runs=0,
                             science_samples=0, safety_violations=0, energy_used=0., distance=0,
-                            decision_seconds=0., planning_seconds=0., anomalies=0)
+                            decision_seconds=0., planning_seconds=0., anomalies=0, contacts=0, events={},
+                            wait_steps=0, degraded_steps=0, link_outage_steps=0)
 
     # ------------------------------------------------------------------ setup
     def _free_cells(self):
@@ -246,11 +258,26 @@ class HybridMission:
     # -------------------------------------------------------------- helpers
     @property
     def temperature_internal(self):
-        return 20. + (self.profile.temperature - 20.) * .1  # thermal control model (supuesto)
+        base = 20. + (self.profile.temperature - 20.) * .1  # thermal control model (supuesto)
+        return base + (HEAT_INTERNAL if self.timers['heat'] else 0.)
+
+    @property
+    def vibration_level(self):
+        return VIBRATION_LEVEL if self.timers['vibration'] else 0.
+
+    @property
+    def wind_speed(self):
+        return WIND_SPEED if self.timers['wind'] else 0.
+
+    @property
+    def link_latency(self):
+        """Seconds since the link was lost (0 with the link up)."""
+        return self.link_down_steps * self.config['step_duration']
 
     def cell_cost(self, speed=FIXED_SPEED, slope=0.):
         base = .45 * (.7 + .6 * speed) * (1 + .5 * (1 - self.visibility)) + .01 * slope
-        return base * self.config['step_duration']
+        factor = (HEAT_ENERGY if self.timers['heat'] else 1.) * (WIND_ENERGY if self.timers['wind'] else 1.)
+        return base * self.config['step_duration'] * factor
 
     def _bfs(self, start, goal=None, avoid=frozenset(), goals=None):
         goals = goals or {goal}
@@ -312,8 +339,13 @@ class HybridMission:
         }
 
     def _observe(self, cell):
-        return self.sensors.observe(self.world, self.position, cell, self.battery, self.profile,
-                                    self.daylight, self.visibility)
+        readings = self.sensors.observe(self.world, self.position, cell, self.battery, self.profile,
+                                        self.daylight, self.visibility)
+        if self.timers['heat'] and _finite(readings.get('temperature_external')):
+            readings['temperature_external'] += HEAT_EXTERNAL
+        readings['vibration'] = self.vibration_level
+        readings['wind_speed'] = self.wind_speed
+        return readings
 
     # ------------------------------------------------------------- planning
     def _mark_rna(self, cell, label):
@@ -476,6 +508,8 @@ class HybridMission:
         position = data.pop('position', None)
         event = Event(kind, data)
         kind = event.kind
+        if self.timers['link']:
+            self.queued_orders += 1  # operator order issued during the outage
         if position is not None:
             position = tuple(int(v) for v in position)
         if kind in ('barranco', 'meteorito', 'alienigena'):
@@ -520,26 +554,41 @@ class HybridMission:
                     if self.world.in_bounds(cell) and cell != self.position:
                         self.risk[cell] = max(self.risk.get(cell, 0.), .6)
             self.timers['vibration'] = 2
-            self.replan_reason = 'METEORITO'
+            if abs(position[0] - self.position[0]) + abs(position[1] - self.position[1]) <= 1:
+                self.health = max(0., self.health - METEORITE_DAMAGE)
         elif kind == 'sismo':
             self.wait_steps = 2
             self.timers['vibration'] = 3
-            self.replan_reason = 'SISMO'
+            self.health = max(0., self.health - QUAKE_DAMAGE)
+        elif kind == 'ola_calor':
+            self.timers['heat'] = HEAT_STEPS
+        elif kind == 'alienigena':
+            self.metrics['contacts'] += 1
         elif kind == 'tormenta_polvo':
             self.timers['storm'] = 15
         elif kind in ('dia', 'noche'):
             self.day_counter = 0
         elif kind == 'perdida_enlace':
-            self.timers['link'] = 10
+            self.timers['link'] = LINK_STEPS
         elif kind == 'biosenal_anomala':
             self.metrics['anomalies'] += 1
-        elif kind == 'viento' and self.profile.mode == 'probe':
-            self.wind_wait = 1
-            self.replan_reason = 'VIENTO'
+            self.battery = max(0., self.battery - BIOSIGNAL_ENERGY)  # spectrometer analysis
+        elif kind == 'viento':
+            self.timers['wind'] = WIND_STEPS
+            if self.profile.mode == 'probe':
+                self.wind_wait = 1
+        self.metrics['events'][kind] = self.metrics['events'].get(kind, 0) + 1
         entry = dict(step=self.step_index, kind=kind, label=EVENT_LABELS.get(kind, kind),
                      message=result.get('message', kind), position=list(position) if position else None)
         self.event_log.append(entry)
         self.pending_events.append(entry)
+        if kind in PERCEIVABLE_EVENTS:
+            if self.route is None:
+                self.replan_reason = kind.upper()      # not planned yet: the first plan covers it
+            else:
+                self._plan(kind.upper())               # F9: replan now, not on the next step
+                self.ga['step'] = self.step_index + 1  # logged with the next step record
+                entry['replanned'] = True
         return entry
 
     def _tick_environment(self):
@@ -552,9 +601,16 @@ class HybridMission:
             self.visibility = .2
         else:
             self.visibility = 1. if self.daylight else .6
-        for key in ('link', 'vibration'):
+        for key in ('vibration', 'heat', 'wind'):
             if self.timers[key]:
                 self.timers[key] -= 1
+        if self.timers['link']:
+            self.timers['link'] -= 1
+            self.metrics['link_outage_steps'] += 1
+            self.link_down_steps += 1
+            if not self.timers['link']:
+                self.link_down_steps = 0
+                self.queued_orders = 0  # queue is flushed when the link returns
         self.sensors.link_available = self.timers['link'] == 0
         for name in list(self.sensor_timers):
             self.sensor_timers[name] -= 1
@@ -715,6 +771,8 @@ class HybridMission:
         if self.wind_wait and decision.reason == 'R16_ESPERA_VIENTO':
             self.wind_wait -= 1
         self.no_route_steps = self.no_route_steps + 1 if decision.reason == 'R10_SIN_RUTA' else 0
+        self.metrics['wait_steps'] += decision.reason in WAIT_REASONS
+        self.metrics['degraded_steps'] += not all(nav_valid.values())
 
         # 7. update mission state
         self.state = decision.state
@@ -750,7 +808,7 @@ class HybridMission:
             vetoes=decision.vetoes, permitted_by=decision.permitted_by,
             sensors={k: readings.get(k) for k in ('distance', 'elevation_delta', 'slope', 'temperature_external',
                                                      'visibility', 'solar_power', 'pressure', 'oxygen_ambient',
-                                                     'radiation', 'link_available')},
+                                                     'radiation', 'link_available', 'vibration', 'wind_speed')},
             nav_valid=nav_valid, edge_cliff=edge,
             rna=None if rna is None else dict(label=rna['label'], confidence=round(rna['confidence'], 4),
                                               probabilities={k: round(v, 4) for k, v in rna['probabilities'].items()},
@@ -765,7 +823,8 @@ class HybridMission:
                               if ga_now.get('chosen') is not None else None),
                 rejected=ga_now.get('rejected')),
             route=[list(c) for c in (self.route or [])[:12]], events=events,
-            science=round(self.world.science_progress, 3), seed=self.seed, operational_label=ASSUMPTION)
+            science=round(self.world.science_progress, 3), seed=self.seed,
+            event_count=sum(self.metrics['events'].values()), operational_label=ASSUMPTION)
         self.last = dict(record=record, rna=rna, fuzzy=fuzzy, decision=decision.to_dict(), readings=readings,
                          nav_valid=nav_valid, speed=speed)
         return record
@@ -791,6 +850,9 @@ class HybridMission:
                     energy_used=round(m['energy_used'], 3), distance=m['distance'],
                     science=round(self.world.science_progress, 3), samples=m['science_samples'],
                     instruments=len(self.recovered), instruments_total=len(self.world.resources),
+                    events=dict(m['events']), events_total=sum(m['events'].values()),
+                    wait_steps=m['wait_steps'], degraded_steps=m['degraded_steps'],
+                    anomalies=m['anomalies'], contacts=m['contacts'], link_outage_steps=m['link_outage_steps'],
                     replans=m['replans'], ga_runs=m['ga_runs'], safety_violations=m['safety_violations'],
                     decision_ms=round(1000 * m['decision_seconds'] / max(1, self.step_index), 3),
                     planning_s=round(m['planning_seconds'], 3), health=round(self.health, 2))

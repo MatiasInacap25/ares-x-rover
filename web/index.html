@@ -436,8 +436,8 @@ function sync3d(){ if(!V.renderer||!S) return;
   lastPos=pos; lastStep=S.status.step;
   // lighting: day / night / storm
   const P=PLANETS[S.planet.name]||PLANETS.Marte; const night=!S.status.daylight, storm=S.status.storm>0;
-  V.sun.intensity=P.sun*(night?.18:1)*(storm?.55:1); V.hemi.intensity=night?.28:.75;
-  const sky=new THREE.Color(P.sky); if(night) sky.lerp(new THREE.Color(0x05060c),.82); if(storm) sky.lerp(new THREE.Color(0xa0603a),.5);
+  V.sun.intensity=P.sun*(night?.18:1)*(storm?.55:1)*(S.status.heat>0?1.35:1); V.sun.color.setHex(S.status.heat>0?0xffb070:0xfff0dd); V.hemi.intensity=night?.28:.75;
+  const heat=S.status.heat>0; const sky=new THREE.Color(P.sky); if(night) sky.lerp(new THREE.Color(0x05060c),.82); if(storm) sky.lerp(new THREE.Color(0xa0603a),.5); if(heat) sky.lerp(new THREE.Color(0xff5a1f),.45);
   V.scene.background=sky; V.scene.fog.color.copy(storm?new THREE.Color(0xa86a42):night?new THREE.Color(0x0b0b12):new THREE.Color(P.fog)); V.scene.fog.density=P.fogD*(storm?4.2:night?1.6:1);
   setDust(storm); if(S.status.quake>0) V.shake=.7;
 }
@@ -490,13 +490,13 @@ function render(){ if(!S) return; const st=S.status;
 function tl(name,unit,val,status,chipText){ return `<div class="tl ${status}"><div><div class="n">${name}</div><div class="u">${unit}</div></div><div class="v">${val}</div><span class="chip ${status}">${chipText||{ok:'NOMINAL',warn:'ALERTA',bad:'CRÍTICO',ref:'REF.'}[status||'ok']}</span></div>`; }
 function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
   $('pName').textContent=P.name; $('pInfo').innerHTML=`${P.mode==='rover'?'Rover de superficie':'Sonda atmosférica virtual'}<br>g ${fmt(P.gravity,2)} m/s² · ${fmt(P.temperature,0)} °C ref.`; drawPlanetIcon(P.name);
-  $('tSub').textContent=`SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')} · ${st.daylight?'día':'noche'}`;
+  $('tSub').textContent=`SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')} · ${st.daylight?'día':'noche'}${st.storm?' · tormenta':''}${st.heat?' · ola de calor':''}${st.wind?' · viento':''}`;
   const bat=st.battery, nv=T.nav_valid||{};
   $('tele').innerHTML=[
     tl('Batería','% · ciclo solar',fmt(bat,1)+' %',bat<15?'bad':bat<35?'warn':'ok'),
     tl('Integridad','% mecánica',fmt(st.health,0)+' %',st.health<30?'bad':st.health<70?'warn':'ok'),
     tl('Temp. exterior','°C · sensor',fmt(T.temperature_external,1),'ref','AMBIENTE'),
-    tl('Temp. componentes','°C · interna',fmt(st.temperature_internal,1),st.temperature_internal>60?'bad':st.temperature_internal>45?'warn':'ok'),
+    tl('Temp. componentes','°C · interna',fmt(st.temperature_internal,1),st.temperature_internal>60?'bad':st.temperature_internal>45?'warn':'ok',st.heat?`CALOR ${st.heat}`:null),
     tl('O₂ exterior (ambiental)','% vol. · no respiración',fmt(T.oxygen_ambient,2),'ref'),
     tl('O₂ almacenado','% · experimentos',fmt(T.oxygen_stored,0),'ok'),
     tl('Presión','Pa · referencia',T.pressure!==null&&T.pressure!==undefined?(T.pressure>=1e5?(T.pressure/1e5).toFixed(1)+' bar':Math.round(T.pressure)):'—','ref'),
@@ -507,7 +507,11 @@ function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
     tl('LIDAR / borde','Δ elevación m',nv.lidar===false?'NaN':fmt(T.elevation_delta,1),nv.lidar===false?'bad':T.edge_cliff?'bad':'ok',nv.lidar===false?'FALLA':T.edge_cliff?'BARRANCO':null),
     tl('Visibilidad','0–1 · partículas',fmt(st.visibility,2),st.visibility<.4?'bad':st.visibility<.8?'warn':'ok'),
     tl('Potencia solar','W simulados',fmt(T.solar_power,1),T.solar_power<1?'warn':'ok'),
-    tl('Enlace','latencia / autonomía',st.link?'OK':'Perdido',st.link?'ok':'warn',st.link?null:'AUTÓNOMO'),
+    tl('Enlace','latencia s · órdenes en cola',st.link?'OK':`${fmt(st.link_latency,0)} s · ${st.queued_orders}`,st.link?'ok':'warn',st.link?null:'AUTÓNOMO'),
+    tl('Vibración','m/s² · sismómetro',fmt(st.vibration,1),st.vibration>0?'warn':'ok'),
+    tl('Viento','m/s · consumo +30 %',fmt(st.wind,0),st.wind>0?'warn':'ok'),
+    tl('Eventos','total · anomalías · contactos',`${st.events_total} · ${st.anomalies} · ${st.contacts}`,'ref','CONTEO'),
+    tl('Pasos perdidos','espera · sensor degradado',`${st.wait_steps} · ${st.degraded_steps}`,'ref','CONTEO'),
     tl('Ciencia','% sitios visitados',Math.round(st.science*100)+' %','ok','PROGRESO'),
     tl('Instrumentación','cajas recuperadas',`${st.instruments}/${st.instruments_total}`,st.instruments>=st.instruments_total?'ok':'ref',st.instruments>=st.instruments_total?'COMPLETO':'PENDIENTE')].join(''); }
 function renderTop(){ const st=S.status;

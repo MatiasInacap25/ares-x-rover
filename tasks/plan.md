@@ -28,13 +28,13 @@ y termina con un commit local. No se hace `git push` sin preguntar, porque publi
 - [x] Sin scroll ni errores de consola; revisión visual
 
 ### Fase 2 · Eventos en el motor
-- [ ] T3 (F8): ola de calor
-- [ ] T4 (F4): métricas por evento en el motor
-- [ ] T5 (F4): métricas por evento en el panel
-- [ ] T6 (F9): replanificación inmediata
+- [x] T3 (F8): ola de calor
+- [x] T4 (F4): métricas por evento en el motor
+- [x] T5 (F4): métricas por evento en el panel
+- [x] T6 (F9): replanificación inmediata
 
 ### Punto de control B
-- [ ] Suite completa y barrido de 20 semillas con eventos
+- [x] Suite completa y barrido de 20 semillas con eventos
 
 ### Fase 3 · Eventos vivos y alertas
 - [ ] T7 (F3): eventos aleatorios en el motor

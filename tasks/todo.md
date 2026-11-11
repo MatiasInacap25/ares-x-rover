@@ -31,34 +31,34 @@ Comandos de verificación:
 
 ## Fase 2 · Eventos en el motor
 
-- [ ] **T3 (F8) · Ola de calor**
+- [x] **T3 (F8) · Ola de calor**
   - Qué: evento `ola_calor` de 12 pasos: +40 °C exterior, +35 °C en componentes, +20 % de consumo; botón y telemetría.
   - Aceptación: en Marte la velocidad difusa baja y la misión continúa; en Venus termina con `R01_LIMITE_TERMICO`; a los 12 pasos todo vuelve al valor previo.
   - Verificar: tests nuevos en rojo y luego en verde; suite completa.
   - Depende de: nada · Archivos: `src/ares/events.py`, `src/ares/mission.py`, `web/index.html`, `tests/test_h3_hybrid.py` · Tamaño: M
 
-- [ ] **T4 (F4) · Métricas por evento en el motor**
+- [x] **T4 (F4) · Métricas por evento en el motor**
   - Qué: efectos numéricos de la tabla del spec (sismo, meteorito, señal biológica, alienígena, enlace, viento, falla de sensor); conteo por tipo y pasos en espera en `summary()` y en las exportaciones.
   - Aceptación: un test por evento muestra que su métrica cambia frente a la misma misión sin el evento; la señal biológica sigue sin afirmar vida.
   - Verificar: tests nuevos en rojo y luego en verde; suite completa.
   - Depende de: T3 · Archivos: `src/ares/mission.py`, `src/ares/api.py`, `tests/test_h3_hybrid.py` · Tamaño: M
 
-- [ ] **T5 (F4) · Métricas por evento en el panel**
+- [x] **T5 (F4) · Métricas por evento en el panel**
   - Qué: filas de telemetría para vibración, viento, latencia de enlace y órdenes en cola, y contadores de eventos.
   - Aceptación: al inyectar cada evento, su valor cambia en pantalla en el mismo paso o el siguiente.
   - Verificar: en Chrome, inyectar sismo, viento, pérdida de enlace y señal biológica.
   - Depende de: T4 · Archivos: `web/index.html` · Tamaño: S
 
-- [ ] **T6 (F9) · Replanificación inmediata**
+- [x] **T6 (F9) · Replanificación inmediata**
   - Qué: los eventos perceptibles (meteorito, sismo, viento, batería baja, ola de calor, tormenta) recalculan la ruta al inyectarse; los peligros ocultos no.
   - Aceptación: en pausa, un meteorito sobre la ruta cambia la ruta sin dar un paso; un barranco no la cambia hasta que el sensor lo confirma; el AG no corre dos veces por el mismo evento.
   - Verificar: tests nuevos en rojo y luego en verde; suite completa.
   - Depende de: T3, T4 · Archivos: `src/ares/mission.py`, `tests/test_h3_hybrid.py` · Tamaño: S
 
 ### Punto de control B
-- [ ] Suite completa en verde
-- [ ] Barrido de 20 semillas del escenario con eventos: híbrido con 0 violaciones de seguridad; informar los números nuevos
-- [ ] Commits locales de T3 a T6
+- [x] Suite completa en verde
+- [x] Barrido de 20 semillas del escenario con eventos: híbrido con 0 violaciones de seguridad; informar los números nuevos
+- [x] Commits locales de T3 a T6
 
 ---
 
