@@ -67,6 +67,7 @@ input[type=range]{width:100%;accent-color:var(--amber);margin:0;height:14px}
 #ovLegend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .st-EXPLORACION{color:var(--ok)}.st-ALERTA,.st-REPLANIFICACION{color:var(--warn)}.st-REFUGIO{color:var(--blue)}
 .st-MODO_SEGURO,.st-FRACASO{color:var(--bad)}.st-EXITO{color:var(--ok)}.st-CONFIGURACION{color:var(--muted)}
+#travel{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:30;cursor:pointer;background:#03040a}
 #nogl{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted)}
 /* right */
 .pbtn{font:600 11px var(--head);letter-spacing:.08em;text-transform:uppercase;text-align:center;padding:5px 2px}
@@ -115,7 +116,7 @@ canvas.fill{display:block;width:100%}
   </section>
 
   <section class="panel" id="view">
-   <canvas id="scene"></canvas><canvas id="map2d"></canvas><div id="nogl">WebGL no disponible en este navegador.</div>
+   <canvas id="scene"></canvas><canvas id="map2d"></canvas><canvas id="travel" title="Clic para saltar la animación"></canvas><div id="nogl">WebGL no disponible en este navegador.</div>
    <div class="ov" id="ovTop"><b>ARES-X 3D</b><span id="oPlanet">—</span><span id="oStep">—</span><span id="oPolicy" class="small">—</span></div>
    <div class="ov" id="ovCam">
      <span class="seg" title="Cambiar la vista del mapa"><button class="on" data-view="3d">3D</button><button data-view="2d">2D</button></span>
@@ -772,10 +773,42 @@ $('bApply').addEventListener('click',async()=>{ running=false; syncRun(); if(awa
 $('fBattery').addEventListener('input',()=>$('lBat').textContent=$('fBattery').value+' %');
 $('fSpeed').addEventListener('input',()=>$('lSpeed').textContent='×'+String(speedMult()).replace('.',','));
 $('fDur').addEventListener('input',()=>$('lDur').textContent=(+$('fDur').value).toFixed(1)+' s (aplicar)');
+// ------------------------------------------------------------ interplanetary travel (F1)
+const TRAVEL_MS=3000; let travelSkip=null;
+function planetDisc(g,name,x,y,r){ const p=PLANETS[name]||PLANETS.Marte; if(r<=.5) return;
+  const gr=g.createRadialGradient(x-r*.3,y-r*.35,r*.1,x,y,r); gr.addColorStop(0,p.icon[0]); gr.addColorStop(1,p.icon[1]);
+  g.save(); g.beginPath(); g.arc(x,y,r,0,7); g.fillStyle=gr; g.fill(); g.clip();
+  if(p.gas){ g.globalAlpha=.22; g.fillStyle='#fff'; for(let i=-2;i<=2;i++) g.fillRect(x-r,y+i*r*.3-r*.05,r*2,r*.1); g.globalAlpha=1; }
+  const sh=g.createLinearGradient(x-r*.4,y-r*.4,x+r,y+r*.8); sh.addColorStop(0,'rgba(0,0,0,0)'); sh.addColorStop(1,'rgba(0,0,0,.6)'); g.fillStyle=sh; g.fillRect(x-r,y-r,r*2,r*2); g.restore();
+  if(name==='Saturno'){ g.strokeStyle='#e8d7a8'; g.lineWidth=Math.max(1,r*.08); g.beginPath(); g.ellipse(x,y,r*1.6,r*.34,-.3,0,7); g.stroke(); } }
+function travelTo(from,to){ return new Promise(done=>{ const c=$('travel'); c.style.display='block'; c.style.opacity=1; const [g,w,h]=ctx2d(c);
+  const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches, total=reduced?700:TRAVEL_MS;
+  const stars=Array.from({length:140},(_,i)=>({x:(i*97%211)/211,y:(i*53%199)/199,z:.3+(i*31%100)/140})); const t0=performance.now(); let ended=false;
+  const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2, clamp=(v)=>Math.max(0,Math.min(1,v));
+  const end=()=>{ if(ended) return; ended=true; travelSkip=null; c.removeEventListener('click',end); c.style.display='none'; done(); };
+  travelSkip=end; c.addEventListener('click',end);
+  (function frame(now){ if(ended) return; const t=clamp((now-t0)/total), u=Math.min(w,h); g.clearRect(0,0,w,h); g.fillStyle='#03040a'; g.fillRect(0,0,w,h);
+    const warp=reduced?0:Math.sin(Math.PI*clamp((t-.2)/.6));                        // star streaks peak mid-flight
+    stars.forEach(s=>{ const x=((s.x-t*s.z*1.4)%1+1)%1*w, y=s.y*h, len=2+warp*90*s.z; g.strokeStyle=`rgba(210,225,255,${.35+.5*s.z})`; g.lineWidth=s.z*1.6; g.beginPath(); g.moveTo(x,y); g.lineTo(x+len,y); g.stroke(); });
+    const a=ease(clamp(t/.45)), b=ease(clamp((t-.55)/.45));                          // origin recedes, destination approaches
+    planetDisc(g,from,w*(.3-.42*a),h*(.55+.1*a),u*.34*(1-a*.93));
+    planetDisc(g,to,w*(1.12-.42*b),h*(.45+.1*(1-b)),u*.34*(.07+b*.93));
+    if(!reduced){ const k=ease(clamp((t-.12)/.76)), x=w*(.12+.76*k), y=h*(.5-.12*Math.sin(Math.PI*k)), sz=u*.035;      // ship
+      g.save(); g.translate(x,y); g.rotate(-.35*Math.cos(Math.PI*k));
+      const fl=g.createLinearGradient(-sz*4,0,-sz,0); fl.addColorStop(0,'rgba(255,170,60,0)'); fl.addColorStop(1,'rgba(255,220,140,.95)'); g.fillStyle=fl; g.beginPath(); g.moveTo(-sz,-sz*.35); g.lineTo(-sz*(3+Math.sin(now/40)),0); g.lineTo(-sz,sz*.35); g.fill();
+      g.fillStyle='#e9edf5'; g.beginPath(); g.moveTo(sz*1.6,0); g.lineTo(-sz,-sz*.55); g.lineTo(-sz,sz*.55); g.closePath(); g.fill();
+      g.fillStyle='#9aa3b5'; g.beginPath(); g.moveTo(-sz,-sz*.55); g.lineTo(-sz*1.5,-sz); g.lineTo(-sz*.3,-sz*.3); g.closePath(); g.fill(); g.beginPath(); g.moveTo(-sz,sz*.55); g.lineTo(-sz*1.5,sz); g.lineTo(-sz*.3,sz*.3); g.closePath(); g.fill();
+      g.fillStyle='#d52b1e'; g.fillRect(-sz*.5,-sz*.22,sz*.9,sz*.44); g.fillStyle='#fff'; g.fillRect(-sz*.5,-sz*.22,sz*.9,sz*.22); g.fillStyle='#0039a6'; g.fillRect(-sz*.5,-sz*.22,sz*.3,sz*.22); g.restore(); }
+    g.textAlign='center'; g.fillStyle='#e8ecf5'; g.font=`600 ${Math.max(13,u*.05)}px system-ui,sans-serif`; g.fillText(`${from.toUpperCase()}  →  ${to.toUpperCase()}`,w/2,h*.88);
+    g.fillStyle='rgba(200,210,230,.7)'; g.font=`${Math.max(10,u*.028)}px system-ui,sans-serif`; g.fillText('Viaje interplanetario simulado · clic para saltar',w/2,h*.94);
+    c.style.opacity=t>.9?1-(t-.9)/.1:1;
+    if(t>=1) end(); else requestAnimationFrame(frame); })(t0); }); }
 async function choosePlanet(name){ running=false; syncRun(); const P=PLANETS[name]; const cfg={...formConfig(),planet:name};
   const v=await api('validate',cfg); if(v.error){ msg(v.error+(P&&P.gas?' Presione otra vez para usar el modo sonda.':''),true);
     if(P&&P.gas){ $('fMode').value='sonda'; } return; }
-  if(await call('configure',cfg)){ gaRunSel=null; msg(`${name}: ${P&&P.gas?'sonda atmosférica virtual (sin suelo sólido para ruedas)':'superficie simulada'} · nuevo terreno.`); } }
+  const from=S&&S.planet.name, trip=from&&from!==name?travelTo(from,name):null;      // only for a valid change of planet
+  const ok=await call('configure',cfg); if(!ok&&travelSkip) travelSkip(); if(trip) await trip;
+  if(ok){ gaRunSel=null; msg(`${name}: ${P&&P.gas?'sonda atmosférica virtual (sin suelo sólido para ruedas)':'superficie simulada'} · nuevo terreno.`); } }
 document.querySelectorAll('[data-export]').forEach(b=>b.addEventListener('click',async()=>{ const o=await api('export',{format:b.dataset.export}); if(o.error){ msg(o.error,true); return; }
   const blob=new Blob([o.content],{type:'text/plain;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=o.filename; document.body.appendChild(a); a.click(); a.remove(); msg('Exportado '+o.filename); }));
 window.addEventListener('resize',()=>{ clearTimeout(window._rt); window._rt=setTimeout(()=>{ draw2d(); renderNN(); renderFuzzy(); renderGA(); renderCompare(); },150); });

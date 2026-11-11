@@ -103,7 +103,7 @@ Comandos de verificación:
   - Verificar: en Chrome, fijar un destino válido y uno sobre un obstáculo.
   - Depende de: T10 · Archivos: `web/index.html` · Tamaño: S
 
-- [ ] **T12 (F1) · Animación de viaje**
+- [x] **T12 (F1) · Animación de viaje**
   - Qué: animación de unos 3 s sobre el mapa al cambiar a un planeta válido; se salta con un clic; no aparece en la primera carga ni con cambios inválidos.
   - Aceptación: tras la animación, planeta, terreno y telemetría son los del destino y la misión está en el paso 0; Júpiter con ruedas no anima.
   - Verificar: en Chrome, Marte a Venus, Marte a Júpiter con ruedas y saltar con clic.
