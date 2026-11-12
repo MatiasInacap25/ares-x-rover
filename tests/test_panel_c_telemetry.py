@@ -155,6 +155,8 @@ def test_same_seed_and_logical_steps_reproduce_telemetry():
 
 @pytest.fixture(scope='module')
 def browser_results(tmp_path_factory):
+    if not (ROOT / 'server.py').exists():
+        pytest.skip('server.py and the browser script are not bundled in the notebook')
     assert shutil.which('chromium') and shutil.which('node'), 'Chromium and Node are required'
     scratch = tmp_path_factory.mktemp('panel-c-a')
     with socket.socket() as reservation:

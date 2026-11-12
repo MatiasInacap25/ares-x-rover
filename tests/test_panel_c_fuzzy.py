@@ -129,6 +129,8 @@ def test_zero_battery_input_activates_critical_battery_rule():
 
 @pytest.fixture(scope='module')
 def browser_results(tmp_path_factory):
+    if not (ROOT / 'server.py').exists():
+        pytest.skip('server.py and the browser script are not bundled in the notebook')
     assert shutil.which('chromium') and shutil.which('node'), 'Chromium and Node are required'
     scratch = tmp_path_factory.mktemp('panel-c-e')
     with socket.socket() as reservation:
