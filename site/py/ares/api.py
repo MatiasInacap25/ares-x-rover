@@ -119,7 +119,7 @@ class Session:
         fuzzy = last.get('fuzzy')
         log = [dict(step=t['step'], state=t['state'], action=t['action'], reason=t['reason'],
                     battery=t['battery'], explanation=t['explanation'], moved=t['moved'],
-                    events=[e['label'] for e in t['events']],
+                    events=[e['label'] + (' (aleatorio)' if e.get('origin') == 'aleatorio' else '') for e in t['events']],
                     rna=(t['rna'] or {}).get('label'), conf=(t['rna'] or {}).get('confidence'),
                     speed=t['crisp_speed'], ga=(t['ga'] or {}).get('best_fitness')) for t in trace[-60:]]
         return clean(dict(
@@ -189,7 +189,7 @@ class Session:
             drone=m.drone, ghosts=self.ghost_view(),
             policy_uses={k: m.policy[k] for k in ('rna', 'fuzzy', 'ga')},
             event_feed=dict(total=len(m.event_log),
-                            recent=[dict(step=e['step'], kind=e['kind'], label=e['label'], message=e.get('message') or '')
+                            recent=[dict(step=e['step'], kind=e['kind'], label=e['label'], origin=e.get('origin', 'operador'), message=e.get('message') or '')
                                     for e in m.event_log[-12:]]),
             comparison=self.comparison))
 

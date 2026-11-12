@@ -23,8 +23,9 @@ archivos locales.
 python -m venv .venv
 .venv/bin/pip install numpy pandas scikit-learn matplotlib pytest
 .venv/bin/python server.py          # http://127.0.0.1:8765
-.venv/bin/python -m pytest -q       # 131 pruebas
+.venv/bin/python -m pytest -q       # 458 pruebas (~16 min; incluye pruebas de navegador con Chromium y Node)
 .venv/bin/python build_notebook.py  # regenera ARES_X_Rover.ipynb desde src/ y web/
+.venv/bin/python build_site.py      # regenera site/ (versión web con Pyodide, la que publica Vercel)
 ```
 
 ## Semilla de demostración
@@ -36,16 +37,13 @@ Comparación de políticas con 5 semillas → exportar CSV/JSON.
 ## Uso del panel
 | Zona | Contenido |
 |---|---|
-| A · Mapa | Ruta ejecutada vs planificada, candidatas del AG, celdas peligrosas, riesgo RNA, refugios, sitios científicos. «Mostrar terreno oculto» revela lo que el rover aún no descubrió. Clic con una herramienta de edición para colocar obstáculos o barrancos reales. |
-| B · Telemetría | Batería, integridad, riesgo, temperaturas, pendiente, proximidad, visibilidad, estado de sensores y enlace. |
-| C · Decisión explicable | Valores concretos de RNA, difuso, AG y la decisión del árbitro con su código de motivo. |
-| D · Traza | Historial filtrable (vetos, replanificaciones, eventos); exportable a CSV/JSON. |
-| E · Controles | Planeta, modo, semilla, dificultad, batería, política; iniciar, pausar, paso, reiniciar, velocidad; 14 eventos. |
-
-Pestañas: **Laboratorio RNA** (sliders de sensores → probabilidades, capas, métricas de test, matriz de confusión),
-**Laboratorio Difuso** (membresías, punto de entrada, reglas activas, agregación y centroide), **Laboratorio Genético**
-(selector de ejecución y generación, cromosomas y fitness, operadores, pesos configurables, desglose por candidata y
-vetos), **Comparación de políticas** (n semillas, media ± desviación y mediana).
+| A · Telemetría | Batería, integridad, riesgo, temperaturas, presión, pendiente, proximidad, visibilidad, estado de sensores y enlace. |
+| Mapa | Vista 3D o 2D; cámaras seguir, general y cenital; «ocultos» revela lo que el rover aún no descubrió; alertas sobre el mapa; línea de tiempo para repetir la misión. Ruta ejecutada y planificada, refugios, sitios científicos, destinos y ediciones del operador. |
+| C · Control de misión | Planeta, modo, política, semilla, dificultad, batería, duración de paso, **eventos aleatorios (0–10 %, 3 % por defecto)**; iniciar, paso, reiniciar, velocidad; carrera de fantasmas; dron explorador; 14 eventos inyectables; destinos del rover; edición del terreno real; exportar CSV/JSON. |
+| D · Red neuronal | Predicción en vivo de la celda siguiente o modo prueba con valores editables. |
+| E · Lógica difusa | Membresías, reglas activas, agregación y centroide (en vivo o de prueba). |
+| F · Algoritmo genético | Ejecuciones y generaciones del AG, cromosomas, fitness, operadores y pesos configurables. |
+| G · Bitácora | Decisiones filtrables (vetos, AG, eventos; los aleatorios se marcan «(aleatorio)») y comparación de políticas con n semillas. |
 
 ## Arquitectura
 `src/ares/`: `PlanetProfile` (planet.py), `World`, `SensorSuite`, `Event`, `MissionLogger`, `NeuralPerception`,
@@ -86,5 +84,6 @@ replanificar_ag_si_corresponde → aplicar_restricciones → ejecutar_accion →
 | Umbral RNA | confianza ≥ 0,65 para vetar; riesgo = 0,7·p(obstáculo) + p(barranco) |
 | Margen de retorno | se vuelve al refugio cuando energía de retorno × 1,25 ≥ batería |
 | Corrosión en Venus | −0,4 % de integridad por paso |
+| Eventos aleatorios | Probabilidad por paso 0–10 % (3 % en el panel, 0 % en motor, experimentos y tests); generador propio derivado de la semilla; tipo elegido por pesos según el planeta (p. ej. tormenta de polvo en Marte, corrosión y ola de calor en Venus); sin barrancos en modo sonda |
 
 Referencias de contraste: NASA Planetary Fact Sheet y NASA Science (temperaturas del sistema solar, Venus y Marte).

@@ -99,6 +99,8 @@ def test_panel_entry_points_start_at_three_percent():
     from ares.dashboard import Dashboard
     assert Dashboard().session.config['event_rate'] == .03
     root = Path(__file__).resolve().parents[1]
+    if not (root / 'server.py').exists():
+        pytest.skip('server.py and build_site.py are not bundled in the notebook')
     assert 'Session(event_rate=.03)' in (root / 'server.py').read_text()
     assert 'Session(event_rate=0.03)' in (root / 'build_site.py').read_text()
 

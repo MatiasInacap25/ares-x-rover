@@ -83,9 +83,9 @@ Comandos de verificación:
   - Depende de: T7 · Archivos: `web/index.html`, `src/ares/api.py` · Tamaño: M
 
 ### Punto de control C
-- [ ] Misión automática con eventos aleatorios y alertas revisada en Chrome
+- [x] Misión automática con eventos aleatorios y alertas revisada en Chromium (10 % → 7 eventos en 42 pasos; 0 % → ninguno)
 - [ ] Medir cuánto tarda una replanificación en la versión web
-- [ ] Commits locales de T7 a T9
+- [x] Commits locales de T7 a T9
 
 ---
 
@@ -109,7 +109,7 @@ Comandos de verificación:
   - Verificar: en Chrome, Marte a Venus, Marte a Júpiter con ruedas y saltar con clic.
   - Depende de: nada · Archivos: `web/index.html` · Tamaño: S
 
-- [ ] **T13 · Documentación y verificación final**
+- [x] **T13 · Documentación y verificación final** — README al día (458 pruebas); notebook ejecutado: 41 celdas sin errores; `site/` regenerado: carga, simula, sin scroll ni errores de consola a 1366×768 y 1920×1080 (favicon inline)
   - Qué: actualizar `README.md` (eventos, supuestos nuevos, cantidad de tests); regenerar notebook y sitio; ejecutar el notebook completo.
   - Aceptación: los cuatro criterios de éxito del spec.
   - Verificar: suite completa; notebook ejecutado sin errores; versión web local carga y simula; página sin scroll a 1366×768 y 1920×1080.
@@ -136,5 +136,5 @@ Comandos de verificación:
 - [x] **T20 (F15) · Repetición con línea de tiempo** — verificado en Chrome (retroceder, avanzar, volver al presente, reiniciar desde la repetición). Archivos: `web/index.html`
 
 ### Punto de control final
-- [ ] Criterios de éxito del spec cumplidos
+- [x] Criterios de éxito del spec cumplidos
 - [ ] Preguntar antes de `git push` (publica en producción)

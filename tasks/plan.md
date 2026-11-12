@@ -42,7 +42,7 @@ y termina con un commit local. No se hace `git push` sin preguntar, porque publi
 - [x] T9 (F2): alertas sobre el mapa
 
 ### Punto de control C
-- [ ] Misión automática con eventos aleatorios y alertas, revisada en Chrome
+- [x] Misión automática con eventos aleatorios y alertas, revisada en Chromium
 
 ### Fase 4 · Control del operador y cierre
 - [x] T10 (F6): destino en el motor
@@ -52,7 +52,7 @@ y termina con un commit local. No se hace `git push` sin preguntar, porque publi
 - [x] T15 (F11): terreno con forma de superficie planetaria
 - [x] T16 (F12): ediciones del operador visibles
 - [x] T17 (F13): varios destinos con el mejor orden de visita
-- [ ] T13: documentación, notebook, sitio y verificación final
+- [x] T13: documentación, notebook, sitio y verificación final
 
 ### Punto de control final
 - [ ] Criterios de éxito del spec cumplidos; preguntar antes de publicar
