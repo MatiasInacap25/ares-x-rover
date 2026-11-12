@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class Dashboard:
     def __init__(self, session=None, height=880, **config):
+        config.setdefault('event_rate', .03)  # F3: the panel starts with 3 % random events
         self.session = session or Session(**config)
         self.height = int(height)
 

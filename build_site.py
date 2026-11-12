@@ -27,7 +27,7 @@ window.ARES_BOOT = (async () => {{
   py.FS.mkdirTree('/app/ares');
   for (const name of files) py.FS.writeFile('/app/ares/' + name, await (await fetch('py/ares/' + name)).text());
   await new Promise(r => setTimeout(r, 30));
-  py.runPython("import sys; sys.path.insert(0, '/app'); from ares.api import Session, handle_json; SESSION = Session()");
+  py.runPython("import sys; sys.path.insert(0, '/app'); from ares.api import Session, handle_json; SESSION = Session(event_rate=0.03)");
   const handle = py.globals.get('handle_json'), session = py.globals.get('SESSION');
   window.ARES_TRANSPORT = async (fn, args) => handle(session, fn, args);
   box.remove();

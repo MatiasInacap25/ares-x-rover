@@ -170,6 +170,7 @@ canvas.fill{display:block;width:100%}
     </div>
     <div class="sl" style="margin-top:4px">Batería inicial<span id="lBat">100 %</span><input id="fBattery" type="range" min="0" max="100" step="1" value="100"></div>
     <div class="sl">Duración de paso (tiempo y energía por ciclo)<span id="lDur">1.0 s</span><input id="fDur" type="range" min="0.5" max="3" step="0.5" value="1"></div>
+    <div class="sl" title="Probabilidad de un evento al azar en cada paso, según el planeta">Eventos aleatorios<span id="lEv">3 %</span><input id="fEvents" type="range" min="0" max="10" step="1" value="3"></div>
     <button class="btn c" id="bApply" style="width:100%;margin-top:4px">Aplicar configuración</button>
     <div class="lbl">Simulación</div>
     <div class="g3"><button class="btn go" id="bRun">▶ Iniciar</button><button class="btn c" id="bStep">Paso</button><button class="btn c" id="bReset">Reiniciar</button></div>
@@ -638,7 +639,7 @@ function pushAlert(sev,title,text){ const box=$('alerts'), el=document.createEle
 function notify(o,prev){ const feed=o.event_feed; if(!feed) return;
   if(!prev||o.status.step===0&&feed.total<(prev.event_feed||{total:0}).total||o.config.seed!==prev.config.seed||o.planet.name!==prev.planet.name){ if(prev) $('alerts').replaceChildren(); return; }   // first load or a new mission: nothing to announce
   const fresh=Math.min(feed.recent.length,Math.max(0,feed.total-(prev.event_feed||{total:feed.total}).total));
-  feed.recent.slice(feed.recent.length-fresh).forEach(e=>pushAlert(EVENT_SEV[e.kind]||'info',e.label,/^Evento aplicado/.test(e.message)&&EVENT_TEXT[e.kind]?EVENT_TEXT[e.kind]:e.message));
+  feed.recent.slice(feed.recent.length-fresh).forEach(e=>pushAlert(EVENT_SEV[e.kind]||'info',e.origin==='aleatorio'?e.label+' (aleatorio)':e.label,/^Evento aplicado/.test(e.message)&&EVENT_TEXT[e.kind]?EVENT_TEXT[e.kind]:e.message));
   const r=o.decision&&o.decision.reason, pr=prev.decision&&prev.decision.reason;
   if(r&&REASON_SEV[r]&&o.status.step!==prev.status.step&&(r!==pr||REPEATING.has(r))) pushAlert(REASON_SEV[r],r.replace(/_/g,' '),o.decision.explanation||(META.reasons||{})[r]||'');
   if(o.status.finished&&!prev.status.finished) pushAlert(o.status.state==='EXITO'?'ok':'crit','Fin de misión',o.status.outcome||''); }
@@ -692,6 +693,7 @@ function renderTelemetry(){ const st=S.status, T=S.telemetry, P=S.planet;
     tl('Destinos','pendientes · celdas al próximo',S.map.destination?`${st.destinations_left} · ${st.destination_distance??'—'}`:'—',S.map.destination?'warn':'ref',S.map.destination?'EN RUTA':'SIN FIJAR'),
     tl('Instrumentación','cajas recuperadas',`${st.instruments}/${st.instruments_total}`,st.instruments>=st.instruments_total?'ok':'ref',st.instruments>=st.instruments_total?'COMPLETO':'PENDIENTE')].join(''); }
 function renderTop(){ const st=S.status; $('bGhost').classList.toggle('on',(S.ghosts||[]).length>0); $('bDrone').classList.toggle('on',!!S.config.drone); $('bDrone').title=S.drone&&S.drone.reason?S.drone.reason:'Un dron vuela adelante y comparte los peligros que ve';
+  if(document.activeElement!==$('fEvents')){ const ev=Math.round((S.config.event_rate||0)*100); $('fEvents').value=ev; $('lEv').textContent=ev+' %'; }
   if(document.activeElement!==$('fDur')){ $('fDur').value=S.config.step_duration; $('lDur').textContent=(+S.config.step_duration).toFixed(1)+' s'; }
   $('oPlanet').textContent=`${S.planet.name.toUpperCase()} · SOL ${String(Math.floor(st.step/60)+1).padStart(3,'0')}`;
   $('oStep').textContent=`paso ${st.step} · t=${fmt(st.t,1)} s`; $('oPolicy').textContent=S.policy_label; $('cSeed').textContent=`semilla ${S.config.seed}`;
@@ -858,7 +860,7 @@ function renderCompare(){ const C=S&&S.comparison; if(!C||logMode!=='cmp') retur
   g.fillStyle=css('--ok'); g.fillText('éxito',4,10); g.fillStyle=css('--bad'); g.fillText('colisiones (0–3)',40,10); }
 
 // ------------------------------------------------------------ controls
-function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value, step_duration:Number($('fDur').value), drone:!!(S&&S.config.drone)}; }
+function formConfig(){ return {planet:(S&&S.planet.name)||'Marte', mode:$('fMode').value, seed:Number($('fSeed').value), difficulty:$('fDiff').value, battery:Number($('fBattery').value), policy:$('fPolicy').value, step_duration:Number($('fDur').value), event_rate:Number($('fEvents').value)/100, drone:!!(S&&S.config.drone)}; }
 function syncRun(){ const b=$('bRun'); b.textContent=running?'⏸ Pausa':'▶ Iniciar'; }
 const BASE_STEP_MS=700, SPEEDS=[.5,.75,1,1.5,2,4];
 const speedMult=()=>SPEEDS[+$('fSpeed').value]||1;
@@ -878,6 +880,7 @@ $('bApply').addEventListener('click',async()=>{ running=false; syncRun(); if(awa
 $('fBattery').addEventListener('input',()=>$('lBat').textContent=$('fBattery').value+' %');
 $('fSpeed').addEventListener('input',()=>$('lSpeed').textContent='×'+String(speedMult()).replace('.',','));
 $('fDur').addEventListener('input',()=>$('lDur').textContent=(+$('fDur').value).toFixed(1)+' s (aplicar)');
+$('fEvents').addEventListener('input',()=>$('lEv').textContent=$('fEvents').value+' % (aplicar)');
 // ------------------------------------------------------------ interplanetary travel (F1)
 const TRAVEL_MS=3000; let travelSkip=null;
 function planetDisc(g,name,x,y,r){ const p=PLANETS[name]||PLANETS.Marte; if(r<=.5) return;

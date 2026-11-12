@@ -64,13 +64,13 @@ Comandos de verificación:
 
 ## Fase 3 · Eventos vivos y alertas
 
-- [ ] **T7 (F3) · Eventos aleatorios en el motor**
+- [x] **T7 (F3) · Eventos aleatorios en el motor** — 8 tests en `tests/test_f3_random_events.py`; suite 456 en verde
   - Qué: parámetro `event_rate` (0 a 0,10; 0 por defecto); sorteo por paso con generador propio; lista ponderada por planeta y modo; origen `aleatorio` en la bitácora.
   - Aceptación: misma semilla y tasa dan la misma traza; con tasa 0 la traza es idéntica a la actual; en 200 pasos al 5 % hay entre 2 y 25 eventos; nunca hay eventos inválidos para el modo ni con la misión terminada.
   - Verificar: tests nuevos en rojo y luego en verde; suite completa.
   - Depende de: T3, T4, T6 · Archivos: `src/ares/mission.py`, `tests/test_h3_hybrid.py` · Tamaño: M
 
-- [ ] **T8 (F3) · Control en el panel y 3 % por defecto**
+- [x] **T8 (F3) · Control en el panel y 3 % por defecto** — 2 tests; Chromium: 3 % inicial, 10 % → 7 eventos en 42 pasos, 0 % → ninguno
   - Qué: slider "Eventos aleatorios" (0 a 10 %); el servidor local, el `Dashboard` y la versión web arrancan con 3 %.
   - Aceptación: con 0 % no aparece ningún evento aleatorio; con 10 % aparecen en una misión automática; los tests siguen usando 0.
   - Verificar: en Chrome, misión automática con 10 % y con 0 %.

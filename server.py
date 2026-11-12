@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 
 from ares.api import Session  # noqa: E402
 
-SESSION = Session()
+SESSION = Session(event_rate=.03)  # F3: the panel starts with 3 % random events
 LOCK = threading.Lock()
 INDEX = ROOT / 'web' / 'index.html'
 
