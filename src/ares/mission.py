@@ -57,6 +57,16 @@ EVENT_LABELS = {
     'alienigena': 'Objeto/ser alienígena (ficción)', 'falla_sensor': 'Falla de sensor',
     'perdida_enlace': 'Pérdida de enlace', 'viento': 'Ráfaga de viento', 'ola_calor': 'Ola de calor',
 }
+MAX_EVENT_RATE = .10
+# F3 random events: base weights, raised by each planet's own hazards (simulation assumption).
+RANDOM_EVENT_WEIGHTS = {'sismo': 1., 'meteorito': 1., 'viento': 1., 'bateria_baja': .5, 'falla_sensor': .5,
+                        'perdida_enlace': .5, 'biosenal_anomala': .3, 'barranco': 1.}
+PLANET_EVENT_BONUS = {
+    'mercurio': {'meteorito': 2., 'ola_calor': 2.}, 'venus': {'corrosion': 3., 'ola_calor': 2.},
+    'tierra': {'sismo': 2.}, 'marte': {'tormenta_polvo': 3., 'barranco': 1.},
+    'jupiter': {'viento': 2.}, 'saturno': {'viento': 2., 'perdida_enlace': 1.},
+    'urano': {'bateria_baja': 1.}, 'neptuno': {'viento': 2., 'perdida_enlace': 1.},
+}
 
 _NN_CACHE = {}
 
@@ -81,7 +91,7 @@ def validate_config(config):
     cfg = dict(planet='Marte', mode='rover', seed=42, difficulty='medium', battery=100.,
                policy='hibrido', step_duration=1., science_count=5, thermal_limit=70.,
                weights=None, hidden_cliffs=4, ga_population=30, ga_generations=30,
-               ga_crossover=.85, ga_mutation=.25, drone=False)
+               ga_crossover=.85, ga_mutation=.25, drone=False, event_rate=0.)
     cfg.update({k: v for k, v in (config or {}).items() if v is not None})
     if normalize(str(cfg['planet'])) not in PROFILES:
         raise ValueError(f"Planeta desconocido: {cfg['planet']}")
@@ -94,6 +104,12 @@ def validate_config(config):
             raise ValueError(f'{key}: debe ser un número') from None
         if not math.isfinite(cfg[key]) or not low <= cfg[key] <= high:
             raise ValueError(f'{key}: valor imposible ({cfg[key]}); rango permitido {low}–{high}')
+    try:
+        cfg['event_rate'] = float(cfg['event_rate'])
+    except (TypeError, ValueError):
+        raise ValueError('event_rate: debe ser un número') from None
+    if not math.isfinite(cfg['event_rate']) or not 0 <= cfg['event_rate'] <= MAX_EVENT_RATE:
+        raise ValueError(f"event_rate: probabilidad imposible ({cfg['event_rate']}); rango 0–{MAX_EVENT_RATE}")
     for key in ('ga_crossover', 'ga_mutation'):
         try:
             cfg[key] = float(cfg[key])
@@ -166,6 +182,7 @@ class HybridMission:
         self.profile = PlanetProfile.for_body(cfg['planet'], cfg['mode'])
         self.seed = cfg['seed']
         self.rng = np.random.default_rng(self.seed + 7)
+        self.event_rng = np.random.default_rng(self.seed + 1013)  # F3: own stream, rate 0 leaves self.rng untouched
         self.world = World(16, 12, seed=self.seed, difficulty=cfg['difficulty'], science_count=cfg['science_count'])
         self.home = (0, 0)
         self._add_second_refuge()
@@ -653,9 +670,10 @@ class HybridMission:
         if self.finished:
             raise ValueError('La misión ya terminó: reinicie para inyectar eventos.')
         position = data.pop('position', None)
+        origin = data.pop('origin', 'operador')
         event = Event(kind, data)
         kind = event.kind
-        if self.timers['link']:
+        if self.timers['link'] and origin == 'operador':
             self.queued_orders += 1  # operator order issued during the outage
         if position is not None:
             position = tuple(int(v) for v in position)
@@ -726,12 +744,33 @@ class HybridMission:
                 self.wind_wait = 1
         self.metrics['events'][kind] = self.metrics['events'].get(kind, 0) + 1
         entry = dict(step=self.step_index, kind=kind, label=EVENT_LABELS.get(kind, kind),
-                     message=result.get('message', kind), position=list(position) if position else None)
+                     message=result.get('message', kind), position=list(position) if position else None,
+                     origin=origin)
         self.event_log.append(entry)
         self.pending_events.append(entry)
         if kind in PERCEIVABLE_EVENTS:
             entry['replanned'] = self._replan_now(kind.upper())  # F9: now, not on the next step
         return entry
+
+    def _random_event(self):
+        """F3: with probability event_rate, inject one planet-weighted event inside this step."""
+        rate = self.config['event_rate']
+        if rate <= 0 or self.finished:
+            return None
+        if self.event_rng.random() >= rate:
+            return None
+        weights = dict(RANDOM_EVENT_WEIGHTS)
+        for kind, bonus in PLANET_EVENT_BONUS.get(normalize(self.profile.name), {}).items():
+            weights[kind] = weights.get(kind, 0.) + bonus
+        if self.profile.mode != 'rover':
+            weights.pop('barranco', None)  # cliffs do not apply to the probe
+        kinds = sorted(weights)
+        total = sum(weights[k] for k in kinds)
+        kind = kinds[int(self.event_rng.choice(len(kinds), p=[weights[k] / total for k in kinds]))]
+        try:
+            return self.inject(kind, origin='aleatorio')
+        except ValueError:
+            return None  # no valid cell for it right now: the draw is simply lost
 
     def _tick_environment(self):
         self.day_counter += 1
@@ -852,6 +891,7 @@ class HybridMission:
         self.elapsed += self.config['step_duration']
         depleted = self.battery <= 0  # 0 % means end of mission: solar cannot revive it
         self._tick_environment()
+        self._random_event()
         if depleted:
             self.battery = 0.
         self._drone_scan()
